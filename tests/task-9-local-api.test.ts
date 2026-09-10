@@ -1,7 +1,10 @@
 import { request as httpRequest } from "node:http";
 import { describe, expect, it } from "vitest";
 import type { AgentEvent } from "../packages/agent-core/src/index.js";
-import { InMemoryLocalAgentSessionStore } from "../packages/local-agent-api/src/index.js";
+import {
+  InMemoryLocalAgentSessionStore,
+  createLocalAgentApiServer,
+} from "../packages/local-agent-api/src/index.js";
 import {
   httpJson,
   httpNdjson,
@@ -320,6 +323,140 @@ describe("task 9 local api basics", () => {
         routeId: "route-a",
         model: "model-a",
         maxTokens: 64,
+      });
+      expect(res.status).toBe(200);
+    });
+  });
+});
+
+describe("task 9 local api options regression", () => {
+  const validRunner = scriptedRunner([makeCompletedEvent()]);
+
+  it("rejects createLocalAgentApiServer(null)", () => {
+    expect(() =>
+      createLocalAgentApiServer(null as unknown as Parameters<typeof createLocalAgentApiServer>[0]),
+    ).toThrow(/Request is invalid\./);
+  });
+
+  it("rejects createLocalAgentApiServer([])", () => {
+    expect(() =>
+      createLocalAgentApiServer([] as unknown as Parameters<typeof createLocalAgentApiServer>[0]),
+    ).toThrow(/Request is invalid\./);
+  });
+
+  it("rejects createLocalAgentApiServer('invalid')", () => {
+    expect(() =>
+      createLocalAgentApiServer(
+        "invalid" as unknown as Parameters<typeof createLocalAgentApiServer>[0],
+      ),
+    ).toThrow(/Request is invalid\./);
+  });
+
+  it("rejects createLocalAgentApiServer(undefined)", () => {
+    expect(() =>
+      createLocalAgentApiServer(
+        undefined as unknown as Parameters<typeof createLocalAgentApiServer>[0],
+      ),
+    ).toThrow(/Request is invalid\./);
+  });
+
+  it("still accepts a valid class Runner after the options fix", () => {
+    class Runner {
+      async run() {
+        return scriptedRunner([makeCompletedEvent()]).run({
+          sessionId: "s",
+          turnId: "t",
+          messages: [],
+          signal: new AbortController().signal,
+        });
+      }
+    }
+    expect(() =>
+      createLocalAgentApiServer({ port: 0, runner: new Runner() }),
+    ).not.toThrow();
+  });
+
+  it("still accepts a valid class Store after the options fix", () => {
+    class Store extends InMemoryLocalAgentSessionStore {}
+    expect(() =>
+      createLocalAgentApiServer({ port: 0, runner: validRunner, store: new Store() }),
+    ).not.toThrow();
+  });
+
+  it("rejects a tool definition without inputSchema", async () => {
+    await withServer(async (port) => {
+      const created = await httpJson(port, "POST", "/v1/sessions", {});
+      const id = (created.json() as { session: { id: string } }).session.id;
+      const res = await httpJson(port, "POST", `/v1/sessions/${id}/turns`, {
+        messages: [userMessage("hi")],
+        tools: [{ name: "read_file", description: "read" }],
+      });
+      expect(res.status).toBe(400);
+      expect((res.json() as { error: { code: string } }).error.code).toBe(
+        "invalid_request",
+      );
+    });
+  });
+
+  it("rejects a non-object tool definition", async () => {
+    await withServer(async (port) => {
+      const created = await httpJson(port, "POST", "/v1/sessions", {});
+      const id = (created.json() as { session: { id: string } }).session.id;
+      const res = await httpJson(port, "POST", `/v1/sessions/${id}/turns`, {
+        messages: [userMessage("hi")],
+        tools: ["not-an-object"],
+      });
+      expect(res.status).toBe(400);
+      expect((res.json() as { error: { code: string } }).error.code).toBe(
+        "invalid_request",
+      );
+    });
+  });
+
+  it("rejects duplicate tool names", async () => {
+    await withServer(async (port) => {
+      const created = await httpJson(port, "POST", "/v1/sessions", {});
+      const id = (created.json() as { session: { id: string } }).session.id;
+      const res = await httpJson(port, "POST", `/v1/sessions/${id}/turns`, {
+        messages: [userMessage("hi")],
+        tools: [
+          { name: "read_file", description: "a", inputSchema: { type: "object" } },
+          { name: "read_file", description: "b", inputSchema: { type: "object" } },
+        ],
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it("rejects an empty tool name", async () => {
+    await withServer(async (port) => {
+      const created = await httpJson(port, "POST", "/v1/sessions", {});
+      const id = (created.json() as { session: { id: string } }).session.id;
+      const res = await httpJson(port, "POST", `/v1/sessions/${id}/turns`, {
+        messages: [userMessage("hi")],
+        tools: [{ name: "", description: "x", inputSchema: { type: "object" } }],
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  it("accepts a fully valid tool definition", async () => {
+    await withServer(async (port) => {
+      const created = await httpJson(port, "POST", "/v1/sessions", {});
+      const id = (created.json() as { session: { id: string } }).session.id;
+      const res = await httpNdjson(port, `/v1/sessions/${id}/turns`, {
+        messages: [userMessage("hi")],
+        tools: [
+          {
+            name: "read_file",
+            description: "Read a file",
+            inputSchema: {
+              type: "object",
+              properties: { path: { type: "string" } },
+              required: ["path"],
+            },
+          },
+        ],
       });
       expect(res.status).toBe(200);
     });

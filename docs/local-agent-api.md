@@ -74,6 +74,15 @@ idle → running → completed
 `apiKey` / `token` / `authorization` / `headers` / `secret` / `password` /
 `credential` / `endpoint` / `baseUrl` / `accessToken` / `refreshToken` / `clientSecret`
 
+敏感字段扫描为 **fail-closed**：对象嵌套深度超过 32 层时直接拒绝，
+不会静默跳过，深层 secret 无法绕过检查。
+
+工具定义使用 `@agent-workbench/agent-core` 的 `validateAgentToolDefinitions()`
+完整校验（含 `inputSchema`、重复名、空名、非对象等）。
+
+`createLocalAgentApiServer(options)` 在任何字段访问前拒绝 `null` / `undefined` /
+数组 / 原始类型，抛出固定 `invalid_request`。
+
 固定错误文案，不回显请求体、路径、URL 或异常堆栈。
 无 CORS、不读环境变量、不写文件、不访问外部网络。
 

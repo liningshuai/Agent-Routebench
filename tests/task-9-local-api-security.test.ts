@@ -250,3 +250,82 @@ describe("task 9 security", () => {
     );
   });
 });
+
+function nestDeep(inner: Record<string, unknown>, depth: number): unknown {
+  let value: unknown = inner;
+  for (let i = 0; i < depth; i += 1) {
+    value = { a: value };
+  }
+  return value;
+}
+
+describe("task 9 deep sensitive fields", () => {
+  const DEEP_SECRET = "TASK9_DEEP_SYNTHETIC_SECRET";
+
+  it("rejects a token nested deeper than 32 levels inside inputSchema", async () => {
+    await withServer(async (port) => {
+      const created = await httpJson(port, "POST", "/v1/sessions", {});
+      const id = (created.json() as { session: { id: string } }).session.id;
+      const deepSchema = nestDeep({ token: DEEP_SECRET }, 40);
+      const res = await httpJson(port, "POST", `/v1/sessions/${id}/turns`, {
+        messages: [userMessage("hi")],
+        tools: [
+          {
+            name: "deep_tool",
+            description: "deep",
+            inputSchema: deepSchema,
+          },
+        ],
+      });
+      expect(res.status).toBe(400);
+      expect(res.text).not.toContain(DEEP_SECRET);
+      expect((res.json() as { error: { code: string } }).error.code).toBe(
+        "invalid_request",
+      );
+    });
+  });
+
+  it("rejects an Authorization header nested deeper than 32 levels inside inputSchema", async () => {
+    await withServer(async (port) => {
+      const created = await httpJson(port, "POST", "/v1/sessions", {});
+      const id = (created.json() as { session: { id: string } }).session.id;
+      const deepSchema = nestDeep(
+        { authorization: `Bearer ${DEEP_SECRET}` },
+        40,
+      );
+      const res = await httpJson(port, "POST", `/v1/sessions/${id}/turns`, {
+        messages: [userMessage("hi")],
+        tools: [
+          {
+            name: "deep_tool",
+            description: "deep",
+            inputSchema: deepSchema,
+          },
+        ],
+      });
+      expect(res.status).toBe(400);
+      expect(res.text).not.toContain(DEEP_SECRET);
+      expect(res.text).not.toContain("Bearer");
+    });
+  });
+
+  it("rejects a tool definition carrying a sensitive field", async () => {
+    await withServer(async (port) => {
+      const created = await httpJson(port, "POST", "/v1/sessions", {});
+      const id = (created.json() as { session: { id: string } }).session.id;
+      const res = await httpJson(port, "POST", `/v1/sessions/${id}/turns`, {
+        messages: [userMessage("hi")],
+        tools: [
+          {
+            name: "read_file",
+            description: "read",
+            inputSchema: { type: "object" },
+            apiKey: DEEP_SECRET,
+          },
+        ],
+      });
+      expect(res.status).toBe(400);
+      expect(res.text).not.toContain(DEEP_SECRET);
+    });
+  });
+});

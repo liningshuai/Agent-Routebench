@@ -1,5 +1,8 @@
-import type { AgentMessage } from "@agent-workbench/agent-core";
-import { validateAgentMessages } from "@agent-workbench/agent-core";
+import type { AgentMessage, AgentToolDefinition } from "@agent-workbench/agent-core";
+import {
+  validateAgentMessages,
+  validateAgentToolDefinitions,
+} from "@agent-workbench/agent-core";
 import { apiErrorPayload } from "./errors.js";
 import type { LocalAgentApiOptions, LocalAgentRunner, LocalAgentSessionStore, LocalAgentTurnRequest } from "./types.js";
 import { DEFAULT_MAX_BODY_BYTES } from "./types.js";
@@ -40,10 +43,17 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return proto === Object.prototype || proto === null;
 }
 
-/** Recursively rejects objects that carry any sensitive field name. */
+/**
+ * Recursively rejects objects that carry any sensitive field name.
+ *
+ * Fail-closed on excessive depth: a value nested past the bound is rejected
+ * rather than silently skipped, so a secret cannot hide past the limit.
+ */
+const MAX_SENSITIVE_SCAN_DEPTH = 32;
+
 export function assertNoSensitiveFields(value: unknown, depth = 0): void {
-  if (depth > 32) {
-    return;
+  if (depth > MAX_SENSITIVE_SCAN_DEPTH) {
+    throw new ApiValidationError("invalidRequest");
   }
   if (Array.isArray(value)) {
     for (const item of value) {
@@ -85,7 +95,14 @@ export function parseApiOptions(
   store: LocalAgentSessionStore | undefined;
   maxBodyBytes: number;
 } {
-  if (!isPlainObject(options) && typeof options !== "object") {
+  // Reject null / undefined / arrays / primitives before any field access.
+  // `typeof null === "object"`, so a plain typeof check is not enough.
+  if (
+    options === null ||
+    options === undefined ||
+    typeof options !== "object" ||
+    Array.isArray(options)
+  ) {
     throw new ApiValidationError("invalidRequest");
   }
   const raw = options as Partial<LocalAgentApiOptions>;
@@ -157,17 +174,10 @@ export function parseTurnRequest(input: unknown): LocalAgentTurnRequest {
     if (!Array.isArray(tools)) {
       throw new ApiValidationError("invalidRequest");
     }
-    for (const tool of tools) {
-      if (!isPlainObject(tool)) {
-        throw new ApiValidationError("invalidRequest");
-      }
-      if (
-        typeof tool.name !== "string" ||
-        tool.name.length === 0 ||
-        typeof tool.description !== "string"
-      ) {
-        throw new ApiValidationError("invalidRequest");
-      }
+    try {
+      validateAgentToolDefinitions(tools as AgentToolDefinition[]);
+    } catch {
+      throw new ApiValidationError("invalidRequest");
     }
   }
 
