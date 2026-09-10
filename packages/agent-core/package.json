@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "description": "Shared Agent Core contracts and runtime validation",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "dependencies": {
     "@agent-workbench/agent-contracts": "workspace:*"
   }

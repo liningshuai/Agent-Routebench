@@ -35,6 +35,8 @@ const required = [
   "docs/verification/task-4-report.md",
   "docs/resilience.md",
   "docs/verification/task-5-report.md",
+  "docs/agent-runtime.md",
+  "docs/verification/task-6-report.md",
   "scripts/verify-layout.mjs",
   "packages/agent-contracts/package.json",
   "packages/agent-contracts/src/contracts.ts",
@@ -71,8 +73,15 @@ const required = [
   "packages/provider-registry/src/presets.ts",
   "packages/provider-registry/src/registry.ts",
   "packages/provider-registry/src/index.ts",
+  "packages/agent-runtime/package.json",
+  "packages/agent-runtime/tsconfig.json",
+  "packages/agent-runtime/src/types.ts",
+  "packages/agent-runtime/src/errors.ts",
+  "packages/agent-runtime/src/agent-loop.ts",
+  "packages/agent-runtime/src/index.ts",
   "tests/helpers/adapter-fixtures.ts",
   "tests/helpers/http-fixtures.ts",
+  "tests/helpers/runtime-fixtures.ts",
   "tests/task-1-package-boundary.test.ts",
   "tests/task-1-agent-contracts.test.ts",
   "tests/task-1-fake-gateway.test.ts",
@@ -90,6 +99,9 @@ const required = [
   "tests/task-5-provider-candidates.test.ts",
   "tests/task-5-resilience.test.ts",
   "tests/task-5-resilience-security.test.ts",
+  "tests/task-6-agent-runtime.test.ts",
+  "tests/task-6-agent-runtime-security.test.ts",
+  "tests/task-6-agent-runtime-cancellation.test.ts",
 ];
 
 for (const path of required) {
@@ -145,6 +157,12 @@ runScenario("task 5 retry and failover", [
   "tests/task-5-resilience-security.test.ts",
 ]);
 
+runScenario("task 6 agent loop and tool boundary", [
+  "tests/task-6-agent-runtime.test.ts",
+  "tests/task-6-agent-runtime-security.test.ts",
+  "tests/task-6-agent-runtime-cancellation.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -161,5 +179,10 @@ console.log(
     "No real provider calls. No real network access. Authentication headers are exercised",
     "only by the injected fake HTTP client; nothing is sent to a real provider.",
     "No persisted credentials.",
+    "Task 6 adds a bounded multi-turn agent loop with an injected ToolExecutor boundary:",
+    "the runtime ships no tool at all, so the offline scenarios drive it with an injected",
+    "fake executor and there is no shell tool, no file tool and no network tool anywhere",
+    "in the runtime. Every model request is answered from a scripted offline gateway, so",
+    "no real model call happens either.",
   ].join(" "),
 );

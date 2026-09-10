@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-**Task 5：有界重试、有序 Provider 故障转移与候选解析**（Task 4 之上）。仓库目前包含：
+**Task 6：有界多轮 Agent Loop 与受控工具执行边界**（Task 5 之上）。仓库目前包含：
 
 - pnpm workspace 与 TypeScript 基础配置
 - Vitest 测试入口
@@ -37,14 +37,24 @@
   - 一旦该 attempt 已输出 `text_delta` / `tool_call` / `usage` / `completed`，
     **不再重试也不再切换**，避免重复输出
   - `createRoutedHttpModelGateway()`（Task 4）行为不变：仍是单 Route、单 Provider、单次 HTTP
+- **`@agent-workbench/agent-runtime`（Task 6）**
+  - 有界多轮 Agent Loop：`turn_started` → Agent Core 事件 → 工具执行 → 下一轮
+  - 通过 `@agent-workbench/agent-core` 的 `createAgentCore()` 编排，只依赖抽象 `ModelGateway`
+  - 工具执行完全由调用方注入（`ToolExecutor`）；runtime **不自带任何工具**
+  - 默认上限：`maxTurns = 8`、`maxToolCallsPerTurn = 16`、`maxToolResultBytes = 65536`
+  - 工具调用批量校验后才执行，串行、保序、不并行、不改写 id
+  - 已输出正常事件后不会重复请求；取消覆盖 gateway / 工具执行 / 退避全程
+  - 事件中**不含工具结果内容**：`tool_execution_completed` 只报告 id 与 `isError`
 
 当前**还没有**：
 
 - 真实供应商端到端验证（没有任何真实模型调用被验证过）
 - 探活请求与模型列表请求
-- 多轮 Agent Loop、工具执行、审批
+- shell / 文件 / 网络工具（runtime 不提供任何默认工具，也不具备这些能力）
+- 审批 UI 与自动批准策略
+- Local Agent API、CLI、Desktop / Tauri 入口
 - Provider / Route / 凭据的持久化（文件、SQLite、OS Keychain）
-- 桌面端（Tauri）与 CLI 功能、Memory、上下文压缩
+- Memory、上下文压缩
 
 所有测试默认离线运行，不依赖外部网络服务。OpenAI-compatible 在本阶段**只覆盖
 Chat Completions 的文本与 function tool 子集**，不代表支持 Responses API、
@@ -52,7 +62,7 @@ Codex 登录或所有 GPT 模型。
 
 凭据边界：secret 只在**单次 HTTP 请求的认证头**里短暂存在，不进入 `ModelRequest`、
 Provider / Route 定义、`ResolvedRoute`、请求体、`ModelStreamEvent`、`AgentEvent`、
-日志或错误消息。`credentialRef` 只是引用，永远不是秘密本身。
+`AgentLoopEvent`、日志或错误消息。`credentialRef` 只是引用，永远不是秘密本身。
 
 ## 目标
 
@@ -86,9 +96,11 @@ pnpm evals:deterministic
 ## 文档
 
 - [架构说明](docs/architecture.md)
+- [Agent Runtime 与工具执行边界](docs/agent-runtime.md)
 - [协议适配器说明](docs/protocol-adapters.md)
 - [HTTP 传输与凭据边界](docs/http-transport.md)
 - [重试、故障转移与 Provider 候选](docs/resilience.md)
+- [Task 6 执行报告](docs/verification/task-6-report.md)
 - [Task 5 执行报告](docs/verification/task-5-report.md)
 - [Task 4 执行报告](docs/verification/task-4-report.md)
 - [Task 3 执行报告](docs/verification/task-3-report.md)

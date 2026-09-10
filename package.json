@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "@agent-workbench/agent-core": "workspace:*",
+    "@agent-workbench/agent-runtime": "workspace:*",
     "@agent-workbench/model-gateway": "workspace:*",
     "@agent-workbench/provider-registry": "workspace:*",
     "@types/node": "^24.10.1",

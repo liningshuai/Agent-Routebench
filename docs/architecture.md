@@ -40,6 +40,22 @@ Anthropic Messages   OpenAI-compatible
 - `agent-core/src/contracts.ts` 与 `model-gateway/src/contracts.ts` 仅作为兼容性
   转出层（re-export）保留，真实实现只有 `agent-contracts` 一份。
 
+在实际分层中，`Agent Runtime`（Task 6）位于 Agent Core 之上，并且**只**依赖
+agent-core 与 agent-contracts：
+
+```text
+@agent-workbench/agent-runtime          (多轮 loop + 注入式工具执行边界)
+        ↓
+@agent-workbench/agent-core             (单次请求校验 + 事件映射 + 错误清洗)
+        ↓
+@agent-workbench/agent-contracts        (中立契约)
+
+具体网关 (Fake / Routed / Resilient) 通过 ModelGateway 接口在运行时注入。
+```
+
+- `agent-runtime` **不得**依赖 `model-gateway` 或 `provider-registry`。
+- `agent-core` 与 `model-gateway` **不得**反向依赖 `agent-runtime`。
+
 ## Provider / Route 配置核心
 
 Provider 与 Route 配置被抽取到独立包 `@agent-workbench/provider-registry`，它是本项目
@@ -74,8 +90,9 @@ Resolved Route
 
 ### 单一 Agent Core
 
-Desktop 与 CLI 共享同一个 Agent Core。两者不得各自实现独立的 Agent Loop。
-所有会话推进、工具调用编排与模型请求都经由同一运行时路径。
+Desktop 与 CLI 共享同一个 Agent Core，以及同一个 Agent Runtime。两者不得各自实现
+独立的 Agent Loop。所有会话推进、工具调用编排与模型请求都经由同一运行时路径
+（`@agent-workbench/agent-runtime` → `@agent-workbench/agent-core` → 注入的 `ModelGateway`）。
 
 ### 共享 Local Agent API
 
@@ -300,7 +317,48 @@ ModelRequest
 - **仍未连接任何真实供应商**：没有验证过真实限流、真实供应商错误或真实 API key。
 
 
+### Task 6（已完成）
+
+新增独立包 `@agent-workbench/agent-runtime`：把 Agent Core 的单次模型请求组合成
+**有界多轮循环**，并把工具执行交给**调用方注入**的执行器。
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| 公开类型 | `packages/agent-runtime/src/types.ts` | `ToolExecutor`、`AgentLoopOptions`、`AgentLoopEvent`、`AgentLoop`、`DEFAULT_AGENT_LOOP_LIMITS` |
+| 稳定错误 | `packages/agent-runtime/src/errors.ts` | `AGENT_LOOP_ERROR_CODES`、固定文案、`AgentLoopError`、固定工具失败内容 |
+| Agent Loop | `packages/agent-runtime/src/agent-loop.ts` | 轮次编排、工具调用批量校验、串行执行、消息追加、取消竞速、资源释放 |
+| 统一导出 | `packages/agent-runtime/src/index.ts` | 公开接口 + 复用 agent-core / agent-contracts 的类型与实现 |
+
+依赖方向：
+
+```text
+@agent-workbench/agent-runtime
+        ↓ 只依赖
+@agent-workbench/agent-core  →  @agent-workbench/agent-contracts
+```
+
+- `agent-runtime` **不依赖** `model-gateway`，也**不依赖** `provider-registry`。
+  具体网关（Fake / Routed / Resilient）都通过 `ModelGateway` 抽象接口注入。
+- `agent-core` 不反向依赖 `agent-runtime`；`model-gateway` 同样不依赖它。
+- 没有跨包 `src` 穿透导入；校验与错误清洗继续复用 Agent Core，未复制实现。
+
+边界：
+
+- runtime **不自带任何工具**：没有 shell、没有文件读写、没有网络；源码中不存在
+  `fetch(`、`node:http`、`node:https`、`node:fs`、`node:child_process` 等能力。
+- 默认上限：`maxTurns = 8`、`maxToolCallsPerTurn = 16`、`maxToolResultBytes = 65536`；
+  非法配置同步抛出 `invalid_loop_options`。
+- 单轮工具调用**整批校验后才执行**（数量 → 执行器是否存在 → 名称是否声明 → 轮数预算），
+  串行、保序、不改写 id；`id` 在整个 loop 内唯一。
+- 工具结果只进入下一轮 `ModelRequest`；`tool_execution_completed` 只暴露
+  `toolCallId` 与 `isError`，**不含结果内容**，原始异常一律折叠为固定安全结果。
+- 取消覆盖 gateway 流、工具执行与每一轮切换；取消后不再开始下一次模型请求，
+  也不输出 `completed` / `loop_completed`。
+- 仍未连接真实供应商，测试中的网关与工具执行器全部是注入式 fake。
+  详见 [Agent Runtime](agent-runtime.md)。
+
+
 ### 后续任务（未实现）
 
-探活与模型列表请求、Provider / Route / 凭据持久化、Agent Loop、工具执行、审批、
-会话存储、Desktop/CLI 入口等。
+探活与模型列表请求、Provider / Route / 凭据持久化、审批 UI 与自动批准策略、
+Local Agent API、CLI、Desktop/Tauri 入口、会话存储、Memory、上下文压缩等。
