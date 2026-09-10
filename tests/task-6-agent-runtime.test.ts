@@ -3,8 +3,25 @@ import {
   DEFAULT_AGENT_LOOP_LIMITS,
   createAgentLoop,
   type AgentLoopEvent,
+  type ModelGateway,
   type ModelRequest,
+  type ModelStreamEvent,
+  type ToolExecutionRequest,
+  type ToolExecutionResult,
+  type ToolExecutor,
 } from "../packages/agent-runtime/src/index.js";
+import {
+  DeterministicFakeModelGateway,
+  ResilientRoutedHttpModelGateway,
+  RoutedHttpModelGateway,
+} from "../packages/model-gateway/src/index.js";
+import {
+  anthropicTextStream,
+  bytesBody,
+  createFakeHttpClient,
+  httpResponse,
+  makeRouteFixture,
+} from "./helpers/http-fixtures.js";
 import {
   collect,
   deepFreeze,
@@ -730,5 +747,231 @@ describe("task 6 runtime — incomplete model stream", () => {
     expect(events.filter((event) => event.type === "completed")).toHaveLength(0);
     expect(events.filter((event) => event.type === "loop_completed")).toHaveLength(0);
     expect(events.at(-1)?.type).toBe("error");
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Structural interfaces: the gateway and the executor are contracts, so a
+ * class instance with a prototype method must be accepted exactly like a
+ * plain object literal. The project's own gateways are all classes.
+ * ------------------------------------------------------------------ */
+
+class ClassGateway implements ModelGateway {
+  readonly calls: ModelRequest[] = [];
+  readonly #script: readonly (readonly ModelStreamEvent[])[];
+
+  constructor(script: readonly (readonly ModelStreamEvent[])[]) {
+    this.#script = script;
+  }
+
+  async *stream(request: ModelRequest): AsyncIterable<ModelStreamEvent> {
+    const index = this.calls.length;
+    this.calls.push(request);
+    const events = this.#script[index];
+    if (events === undefined) {
+      throw new Error("the class gateway received an unexpected extra call");
+    }
+    for (const event of events) {
+      yield event;
+    }
+  }
+}
+
+class ClassToolExecutor implements ToolExecutor {
+  readonly requests: ToolExecutionRequest[] = [];
+
+  async execute(request: ToolExecutionRequest): Promise<ToolExecutionResult> {
+    this.requests.push(request);
+    return { content: `class-result:${request.name}` };
+  }
+}
+
+describe("task 6 runtime — class instances and structural interfaces", () => {
+  it("accepts a class based ModelGateway", () => {
+    const gateway = new ClassGateway([]);
+
+    expect(() => createAgentLoop({ gateway })).not.toThrow();
+  });
+
+  it("keeps the class gateway method on the prototype", () => {
+    const gateway = new ClassGateway([]);
+
+    expect(Object.hasOwn(gateway, "stream")).toBe(false);
+    expect(typeof ClassGateway.prototype.stream).toBe("function");
+  });
+
+  it("runs a text turn through a class based gateway", async () => {
+    const gateway = new ClassGateway([
+      [{ type: "text_delta", text: "from-a-class" }, { type: "completed" }],
+    ]);
+    const loop = createAgentLoop({ gateway });
+
+    const events = await collect(loop.run(makeRequest()));
+
+    expect(textOf(events)).toBe("from-a-class");
+    expect(gateway.calls).toHaveLength(1);
+    expect(events.at(-1)).toEqual({
+      type: "loop_completed",
+      requestId: "req-6",
+      turns: 1,
+    });
+  });
+
+  it("accepts a ToolExecutor whose method lives on the prototype", () => {
+    const gateway = new ClassGateway([]);
+    const toolExecutor = new ClassToolExecutor();
+
+    expect(Object.hasOwn(toolExecutor, "execute")).toBe(false);
+    expect(typeof ClassToolExecutor.prototype.execute).toBe("function");
+    expect(() => createAgentLoop({ gateway, toolExecutor })).not.toThrow();
+  });
+
+  it("runs a tool call through a class based executor", async () => {
+    const gateway = new ClassGateway([
+      [
+        { type: "tool_call", id: "call-1", name: "read_file", input: { path: "a" } },
+        { type: "completed" },
+      ],
+      [{ type: "text_delta", text: "done" }, { type: "completed" }],
+    ]);
+    const toolExecutor = new ClassToolExecutor();
+    const loop = createAgentLoop({ gateway, toolExecutor });
+
+    const events = await collect(loop.run(makeRequest({ tools: [READ] })));
+
+    expect(toolExecutor.requests).toHaveLength(1);
+    expect(toolExecutor.requests[0]?.id).toBe("call-1");
+    expect(textOf(events)).toBe("done");
+    expect(events.at(-1)).toMatchObject({ type: "loop_completed", turns: 2 });
+  });
+
+  it("appends the class executor result to the next request", async () => {
+    const gateway = new ClassGateway([
+      [{ type: "tool_call", id: "call-9", name: "read_file", input: {} }, { type: "completed" }],
+      [{ type: "text_delta", text: "ok" }, { type: "completed" }],
+    ]);
+    const toolExecutor = new ClassToolExecutor();
+    const loop = createAgentLoop({ gateway, toolExecutor });
+
+    await collect(loop.run(makeRequest({ tools: [READ] })));
+
+    expect(gateway.calls[1]?.messages[2]).toEqual({
+      role: "tool",
+      content: [
+        {
+          type: "tool_result",
+          toolCallId: "call-9",
+          content: "class-result:read_file",
+        },
+      ],
+    });
+  });
+
+  it("accepts the project's own DeterministicFakeModelGateway class", async () => {
+    const gateway = new DeterministicFakeModelGateway({
+      events: [
+        { type: "text_delta", text: "class-from-the-project" },
+        { type: "completed" },
+      ],
+    });
+    const loop = createAgentLoop({ gateway });
+
+    const events = await collect(loop.run(makeRequest()));
+
+    expect(textOf(events)).toBe("class-from-the-project");
+    expect(events.at(-1)).toMatchObject({ type: "loop_completed", turns: 1 });
+  });
+
+  it("accepts the project's own RoutedHttpModelGateway class offline", async () => {
+    const fixture = makeRouteFixture();
+    const http = createFakeHttpClient(() =>
+      httpResponse(200, bytesBody(anthropicTextStream("routed-class"))),
+    );
+    const gateway = new RoutedHttpModelGateway({
+      registry: fixture.registry,
+      credentials: fixture.credentials,
+      httpClient: http.client,
+    });
+    const loop = createAgentLoop({ gateway });
+
+    const events = await collect(
+      loop.run(makeRequest({ routeId: fixture.routeId, model: fixture.model })),
+    );
+
+    expect(textOf(events)).toBe("routed-class");
+    expect(http.calls()).toBe(1);
+    expect(events.at(-1)).toMatchObject({ type: "loop_completed", turns: 1 });
+  });
+
+  it("accepts the project's own ResilientRoutedHttpModelGateway class offline", async () => {
+    const fixture = makeRouteFixture();
+    const http = createFakeHttpClient(() =>
+      httpResponse(200, bytesBody(anthropicTextStream("resilient-class"))),
+    );
+    const gateway = new ResilientRoutedHttpModelGateway({
+      registry: fixture.registry,
+      credentials: fixture.credentials,
+      httpClient: http.client,
+      retryPolicy: { initialBackoffMs: 1, maxBackoffMs: 1 },
+      wait: async () => undefined,
+    });
+    const loop = createAgentLoop({ gateway });
+
+    const events = await collect(
+      loop.run(makeRequest({ routeId: fixture.routeId, model: fixture.model })),
+    );
+
+    expect(textOf(events)).toBe("resilient-class");
+    expect(http.calls()).toBe(1);
+    expect(events.at(-1)).toMatchObject({ type: "loop_completed", turns: 1 });
+  });
+
+  it("still rejects null, arrays and primitives as the gateway", () => {
+    for (const value of [null, undefined, [], "gateway", 7, true]) {
+      expect(codeOf(() => createAgentLoop({ gateway: value } as never)), String(value)).toBe(
+        "invalid_loop_options",
+      );
+    }
+  });
+
+  it("still rejects a gateway without a callable stream", () => {
+    const cases = [
+      {},
+      { stream: 1 },
+      { stream: "stream" },
+      { stream: null },
+      // A class instance without the method is just as invalid.
+      new (class NotAGateway {})(),
+    ];
+
+    for (const value of cases) {
+      expect(
+        codeOf(() => createAgentLoop({ gateway: value } as never)),
+        JSON.stringify(value),
+      ).toBe("invalid_loop_options");
+    }
+  });
+
+  it("still rejects a non object tool executor", () => {
+    const gateway = new ClassGateway([]);
+
+    for (const value of [null, [], "executor", 3, true]) {
+      expect(
+        codeOf(() => createAgentLoop({ gateway, toolExecutor: value } as never)),
+        String(value),
+      ).toBe("invalid_loop_options");
+    }
+  });
+
+  it("still rejects a tool executor without a callable execute", () => {
+    const gateway = new ClassGateway([]);
+    const cases = [{}, { execute: 1 }, { execute: {} }, new (class NotAnExecutor {})()];
+
+    for (const value of cases) {
+      expect(
+        codeOf(() => createAgentLoop({ gateway, toolExecutor: value } as never)),
+        JSON.stringify(value),
+      ).toBe("invalid_loop_options");
+    }
   });
 });

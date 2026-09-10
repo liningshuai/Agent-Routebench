@@ -94,6 +94,29 @@ export function createAgentLoop(options: AgentLoopOptions): AgentLoop;
 **`tool_execution_completed` 不含工具结果内容**：只报告 `toolCallId` 与 `isError`。
 工具结果只进入下一轮 `ModelRequest`，不经过事件流。
 
+### 2.1 选项校验与结构化接口
+
+`createAgentLoop()` 会同步校验选项，失败时抛出 `AgentLoopError`
+（`code: "invalid_loop_options"`），**不回显**被拒值：
+
+| 字段 | 要求 |
+|---|---|
+| `options` 本身 | 必须是普通对象（`Object.prototype` 或 `null` 原型） |
+| `gateway` | **非 `null` 的 object、不是数组，且存在可调用的 `stream` 方法** |
+| `toolExecutor` | 可选；出现时必须是**非 `null` 的 object、不是数组，且存在可调用的 `execute` 方法** |
+| `maxTurns` / `maxToolCallsPerTurn` / `maxToolResultBytes` | 可选；出现时必须是正的安全整数 |
+
+`ModelGateway` 与 `ToolExecutor` 是**结构化接口**，因此校验只看形状、不看原型：
+
+- **接受** class 实例（方法在 prototype 上）—— 项目自有的 `DeterministicFakeModelGateway`、
+  `RoutedHttpModelGateway`、`ResilientRoutedHttpModelGateway` 都是 class；
+- **接受**普通对象字面量与 `Object.create(null)` 对象；
+- **拒绝** `null`、数组、字符串、数字、boolean，以及缺少该方法或方法不是函数的对象。
+
+实现上使用内部 `hasCallableMethod(value, method)`：`typeof value === "object"`、
+非 `null`、非数组、且该字段是 `function`。**不会**用 `Object.getPrototypeOf()` 去要求
+gateway / executor 是普通对象。
+
 ## 3. 状态机
 
 ```text

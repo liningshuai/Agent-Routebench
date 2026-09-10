@@ -43,6 +43,21 @@ function isAborted(signal: AbortSignal | undefined): boolean {
   return signal !== undefined && signal.aborted;
 }
 
+/**
+ * Structural check for an injected dependency.
+ *
+ * `ModelGateway` and `ToolExecutor` are structural interfaces, so an
+ * implementation may just as well be a class instance with the method on its
+ * prototype as an object literal. Only the shape matters: a non-null,
+ * non-array object that actually exposes the method as a function.
+ */
+function hasCallableMethod(value: unknown, method: string): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  return typeof (value as Record<string, unknown>)[method] === "function";
+}
+
 function utf8ByteLength(text: string): number {
   return encoder.encode(text).length;
 }
@@ -403,14 +418,14 @@ export function resolveAgentLoopOptions(
   }
 
   const gateway = (options as { gateway?: unknown }).gateway;
-  if (!isPlainObject(gateway) || typeof gateway.stream !== "function") {
+  if (!hasCallableMethod(gateway, "stream")) {
     throw agentLoopError("invalidLoopOptions");
   }
 
   const toolExecutor = (options as { toolExecutor?: unknown }).toolExecutor;
   if (
     toolExecutor !== undefined &&
-    (!isPlainObject(toolExecutor) || typeof toolExecutor.execute !== "function")
+    !hasCallableMethod(toolExecutor, "execute")
   ) {
     throw agentLoopError("invalidLoopOptions");
   }
