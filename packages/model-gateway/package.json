@@ -3,8 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Model Gateway contract, deterministic offline fake gateway and offline protocol adapters",
+  "description": "Model Gateway contract, deterministic offline fake gateway, offline protocol adapters and the routed HTTP transport",
   "dependencies": {
-    "@agent-workbench/agent-contracts": "workspace:*"
+    "@agent-workbench/agent-contracts": "workspace:*",
+    "@agent-workbench/provider-registry": "workspace:*"
   }
 }

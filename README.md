@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-**Task 3：双协议离线 codec——请求转换、SSE 流式解析与离线集成验证**（Task 2 之上）。仓库目前包含：
+**Task 4：Routed HTTP Model Gateway 与凭据注入边界**（Task 3 之上）。仓库目前包含：
 
 - pnpm workspace 与 TypeScript 基础配置
 - Vitest 测试入口
@@ -15,19 +15,26 @@
 - `ModelGateway` 接口、`ModelStreamEvent` 流事件
 - 完全离线、确定性的 `DeterministicFakeModelGateway`
 - 本地内存 Provider / Route 配置核心 `@agent-workbench/provider-registry`
-- **双协议离线适配器 `packages/model-gateway/src/adapters`**
+- 双协议离线适配器 `packages/model-gateway/src/adapters`
   - `anthropic_messages`：请求编码 + Messages SSE 流式解码（文本 / 客户端工具 / usage）
   - `openai_compatible`：Chat Completions 请求编码 + SSE 流式解码（仅声明子集）
   - 共享 SSE 分帧器：UTF-8 跨 chunk、LF/CRLF、多行 data、注释、帧与工具参数上限
   - 增量输出、单一终止事件、取消即结束、上游错误清洗
-- 本地离线集成测试：适配器 → 最小 ModelGateway 包装 → 既有 Agent Core
+- **`RoutedHttpModelGateway`（`packages/model-gateway/src/routed-http-gateway.ts`）**
+  - `routeId` → `ProviderRegistry.resolveRoute()` → `CredentialStore.get(credentialRef)`
+  - 协议请求体由既有 adapter 生成；URL 与认证头由 transport 固定拼接
+  - 单 Route、单 Provider、单次 HTTP 调用：**没有重试、没有故障转移、没有 Provider 轮换**
+  - HTTP 状态与传输异常映射到既有安全错误码，错误消息固定
+  - 响应 body 以增量 `AsyncIterable<Uint8Array>` 直接交给既有 decoder
+- **可注入 HTTP transport（`packages/model-gateway/src/http-transport.ts`）**
+  - `HttpClient` 是可注入的函数边界；生产默认实现基于 Node 24 原生 `fetch`
+  - 所有自动化测试注入 fake client，**不访问任何真实供应商**
 
 当前**还没有**：
 
-- 真实 HTTP 传输、真实模型调用与网络请求
-- 认证头注入、`CredentialStore` 读取、URL 拼接、探活与模型列表请求
-- Provider 路由调度、重试与故障转移
-- Anthropic / OpenAI-compatible 的真实端到端验证（未连接任何供应商）
+- 真实供应商端到端验证（没有任何真实模型调用被验证过）
+- 重试、故障转移、多 Provider fallback、Provider 轮换
+- 探活请求与模型列表请求
 - 多轮 Agent Loop、工具执行、审批
 - Provider / Route / 凭据的持久化（文件、SQLite、OS Keychain）
 - 桌面端（Tauri）与 CLI 功能、Memory、上下文压缩
@@ -35,6 +42,10 @@
 所有测试默认离线运行，不依赖外部网络服务。OpenAI-compatible 在本阶段**只覆盖
 Chat Completions 的文本与 function tool 子集**，不代表支持 Responses API、
 Codex 登录或所有 GPT 模型。
+
+凭据边界：secret 只在**单次 HTTP 请求的认证头**里短暂存在，不进入 `ModelRequest`、
+Provider / Route 定义、`ResolvedRoute`、请求体、`ModelStreamEvent`、`AgentEvent`、
+日志或错误消息。`credentialRef` 只是引用，永远不是秘密本身。
 
 ## 目标
 
@@ -69,6 +80,8 @@ pnpm evals:deterministic
 
 - [架构说明](docs/architecture.md)
 - [协议适配器说明](docs/protocol-adapters.md)
+- [HTTP 传输与凭据边界](docs/http-transport.md)
+- [Task 4 执行报告](docs/verification/task-4-report.md)
 - [Task 3 执行报告](docs/verification/task-3-report.md)
 - [许可证边界](docs/licensing.md)
 

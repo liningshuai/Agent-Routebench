@@ -8,13 +8,14 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 
 // Deterministic offline eval entry.
 //
-// Stage 1 verifies the expected layout. Stage 2 actually *runs* the Task 3
-// offline protocol scenario with real assertions (adapter -> ModelGateway
-// wrapper -> Agent Core) and propagates its exit code, so this entry can no
-// longer print "passed" without exercising behaviour.
+// Stage 1 verifies the expected layout.
+// Stage 2 actually *runs* the offline Task 3 protocol scenario and the offline
+// Task 4 routed HTTP scenario, and propagates their exit codes so this entry can
+// never print "passed" without exercising behaviour.
 //
-// Everything here is offline: no network, no real model calls, no credential
-// persistence.
+// Everything here is offline: the routed HTTP transport is always driven by an
+// injected fake client, so no provider is contacted and no real network access
+// happens. No credential is persisted anywhere.
 
 const required = [
   "package.json",
@@ -27,9 +28,11 @@ const required = [
   "docs/architecture.md",
   "docs/licensing.md",
   "docs/protocol-adapters.md",
+  "docs/http-transport.md",
   "docs/verification/task-3-report.md",
   "docs/verification/task-3-rework-report.md",
   "docs/verification/task-3-final-fix-report.md",
+  "docs/verification/task-4-report.md",
   "scripts/verify-layout.mjs",
   "packages/agent-contracts/package.json",
   "packages/agent-contracts/src/contracts.ts",
@@ -42,6 +45,8 @@ const required = [
   "packages/model-gateway/package.json",
   "packages/model-gateway/src/contracts.ts",
   "packages/model-gateway/src/fake-gateway.ts",
+  "packages/model-gateway/src/http-transport.ts",
+  "packages/model-gateway/src/routed-http-gateway.ts",
   "packages/model-gateway/src/index.ts",
   "packages/model-gateway/src/adapters/index.ts",
   "packages/model-gateway/src/adapters/types.ts",
@@ -61,6 +66,8 @@ const required = [
   "packages/provider-registry/src/presets.ts",
   "packages/provider-registry/src/registry.ts",
   "packages/provider-registry/src/index.ts",
+  "tests/helpers/adapter-fixtures.ts",
+  "tests/helpers/http-fixtures.ts",
   "tests/task-1-package-boundary.test.ts",
   "tests/task-1-agent-contracts.test.ts",
   "tests/task-1-fake-gateway.test.ts",
@@ -72,58 +79,69 @@ const required = [
   "tests/task-3-anthropic-stream.test.ts",
   "tests/task-3-openai-chat-stream.test.ts",
   "tests/task-3-adapter-integration.test.ts",
+  "tests/task-4-http-gateway.test.ts",
+  "tests/task-4-http-security.test.ts",
+  "tests/task-4-http-integration.test.ts",
 ];
 
 for (const path of required) {
   assert.equal(existsSync(join(root, path)), true, `${path} must exist`);
 }
-console.log(`evals:deterministic stage 1 passed (${required.length} expected files present).`);
+console.log(
+  `evals:deterministic stage 1 passed (${required.length} expected files present).`,
+);
 
-// Stage 2: run the offline protocol scenario. A non-zero child exit code must
-// fail this entry; the result is never hard coded.
 const vitestEntry = join(root, "node_modules/vitest/vitest.mjs");
 assert.equal(
   existsSync(vitestEntry),
   true,
-  "node_modules/vitest/vitest.mjs must exist to run the offline protocol scenario",
+  "node_modules/vitest/vitest.mjs must exist to run the offline protocol scenarios",
 );
 
-const scenario = spawnSync(
-  process.execPath,
-  [
-    vitestEntry,
-    "run",
-    "tests/task-3-adapter-integration.test.ts",
-    "--reporter=basic",
-  ],
-  { cwd: root, stdio: "inherit" },
-);
-
-if (scenario.error !== undefined && scenario.error !== null) {
-  console.error(`evals:deterministic failed: ${scenario.error.message}`);
-  process.exit(1);
-}
-
-if (scenario.status !== 0) {
-  console.error(
-    `evals:deterministic failed: the offline protocol scenario exited with code ${String(
-
-      scenario.status,
-    )}.`,
+/** Runs one offline scenario. A non-zero child exit code fails this entry. */
+function runScenario(label, files) {
+  const result = spawnSync(
+    process.execPath,
+    [vitestEntry, "run", ...files, "--reporter=basic"],
+    { cwd: root, stdio: "inherit" },
   );
-  process.exit(1);
+
+  if (result.error !== undefined && result.error !== null) {
+    console.error(`evals:deterministic failed (${label}): ${result.error.message}`);
+    process.exit(1);
+  }
+
+  if (result.status !== 0) {
+    console.error(
+      `evals:deterministic failed (${label}): the offline scenario exited with code ${String(
+        result.status,
+      )}.`,
+    );
+    process.exit(1);
+  }
+
+  console.log(`evals:deterministic stage 2 scenario passed (${label}).`);
 }
+
+runScenario("task 3 protocol codecs", ["tests/task-3-adapter-integration.test.ts"]);
+
+runScenario("task 4 routed HTTP transport", [
+  "tests/task-4-http-gateway.test.ts",
+  "tests/task-4-http-security.test.ts",
+  "tests/task-4-http-integration.test.ts",
+]);
 
 console.log(
   [
     "evals:deterministic passed.",
     "Covered: Task 0 baseline; Task 1 neutral shared contracts + offline fake gateway;",
     "Task 2 offline in-memory provider/route registry;",
-    "Task 3 offline Anthropic Messages and OpenAI Chat Completions codecs verified",
-    "end to end through the existing Agent Core.",
-    "The scenario includes the final-fix regressions: cancellation is checked before the",
-    "frame iterator advances, and lone-CR / CRLF chunk boundaries are framing-identical.",
-    "No real model calls. No live provider adapters. No authentication injection.",
-    "No persisted credentials. No network access.",
+    "Task 3 offline Anthropic Messages and OpenAI Chat Completions codecs;",
+    "Task 4 routed HTTP transport verified end to end through the existing Agent Core.",
+    "The routed transport is always exercised with an injected fake HTTP client, which",
+    "verifies route resolution, the credential reference boundary, request construction,",
+    "HTTP status mapping and incremental offline streaming.",
+    "No real provider calls. No real network access. No authentication is sent anywhere.",
+    "No persisted credentials.",
   ].join(" "),
 );

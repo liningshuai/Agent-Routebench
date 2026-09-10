@@ -46,3 +46,27 @@ export {
   createAnthropicMessagesAdapter,
   createOpenAIChatCompletionsAdapter,
 } from "./adapters/index.js";
+
+export type {
+  FetchLike,
+  FetchResponseLike,
+  HttpClient,
+  HttpRequest,
+  HttpResponse,
+} from "./http-transport.js";
+export {
+  ANTHROPIC_MESSAGES_ENDPOINT,
+  OPENAI_CHAT_COMPLETIONS_ENDPOINT,
+  buildAnthropicHeaders,
+  buildOpenAIChatHeaders,
+  buildProviderUrl,
+  createFetchHttpClient,
+  mapHttpStatusToErrorCode,
+  releaseResponseBody,
+} from "./http-transport.js";
+
+export type { RoutedHttpModelGatewayOptions } from "./routed-http-gateway.js";
+export {
+  RoutedHttpModelGateway,
+  createRoutedHttpModelGateway,
+} from "./routed-http-gateway.js";

@@ -126,15 +126,16 @@ Model Gateway 之下规划两类协议适配：
 适配器由本项目自行实现，目标是对接用户自配置的 Provider 端点，
 而不是复制任何第三方 Agent 产品的私有协议实现。
 
-Task 3 已实现两类协议的**离线 codec**（请求转换 + SSE 流式解析），但它们仍然：
+Task 3 已实现两类协议的**离线 codec**（请求转换 + SSE 流式解析）。codec 本身始终是纯转换层：
 
 - 不建立任何连接，不拼接 URL，不注入认证头；
 - 不读取 `CredentialStore`；
 - 不做路由调度、重试或故障转移。
 
-也就是说，当前是「统一 `ModelRequest` → 协议 body」与「测试字节流 → `ModelStreamEvent`」
-这两段纯函数链，中间的真实传输尚未实现。详见
-[协议适配器说明](protocol-adapters.md)。
+Task 4 在 codec **之上**新增了 Routed HTTP Gateway 与可注入 HTTP transport。传输关注点
+（URL、认证头、状态码映射、取消传播）全部集中在 transport 层，codec 依旧保持纯粹：
+它不知道自己的字节从哪来、也不知道凭据长什么样。详见
+[协议适配器说明](protocol-adapters.md) 与 [HTTP 传输与凭据边界](http-transport.md)。
 
 工具事件（`tool_call`）目前仍是内部数据，**不得**直接当作未来 Renderer 的安全展示
 事件使用。
@@ -218,8 +219,53 @@ Task 3 已实现两类协议的**离线 codec**（请求转换 + SSE 流式解�
 - 包依赖未变：`model-gateway` 仍只依赖 `agent-contracts`。
 - **当前仍没有真实模型调用**，也没有对任何供应商端点做过验证。
 
+### Task 4（已完成）
+
+已在 `@agent-workbench/model-gateway` 内实现 **Routed HTTP Model Gateway**：把
+`ProviderRegistry`、`CredentialStore`、协议 codec 与一个**可注入的 HTTP 客户端**
+串成真实传输路径。链路：
+
+```text
+ModelRequest
+  → routeId
+  → ProviderRegistry.resolveRoute()
+  → CredentialStore.get(credentialRef)
+  → 协议 Adapter.encode()
+  → 固定协议 URL + 认证头
+  → 注入式 HttpClient
+  → 增量字节流
+  → 既有 Adapter.decode()
+  → ModelStreamEvent
+  → Agent Core
+```
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| HTTP 契约与默认实现 | `packages/model-gateway/src/http-transport.ts` | `HttpRequest` / `HttpResponse` / `HttpClient`；URL 拼接；状态码映射；body 释放；基于 Node 24 原生 `fetch` 的默认 client |
+| Routed Gateway | `packages/model-gateway/src/routed-http-gateway.ts` | `RoutedHttpModelGateway` / `createRoutedHttpModelGateway`：路由解析、凭据读取、编码、单次 HTTP 调用、增量解码 |
+
+边界：
+
+- **单 Route、单 Provider、单次 HTTP 调用**：没有重试、没有故障转移、没有 Provider 轮换。
+- `request.model` 必须与 `ResolvedRoute.model` 完全一致；不一致时固定失败，不静默改写。
+- `credentialRef` 为 `null`、凭据缺失或为空时**不发起任何 HTTP 请求**。
+- URL 由「校验过的 baseUrl（去掉尾部 `/`）+ 固定 endpoint」拼成，endpoint 不可被
+  `ModelRequest`、Route 或额外字段覆盖，且不会产生重复 `//`。
+- 认证头是固定的：Anthropic 只用 `x-api-key` + `anthropic-version`，OpenAI 只用
+  `authorization: Bearer …`；两者都只出现在 `HttpRequest.headers`。
+- HTTP 状态与传输异常映射到既有安全白名单错误码，错误消息固定；非 2xx 响应的 body
+  **不会被读取**，也不会交给 adapter。
+- `HttpClient` 是注入点：生产用默认客户端，**所有自动化测试注入 fake client**，
+  因此测试不访问真实网络。
+- 包依赖新增 `@agent-workbench/provider-registry`（仅类型/公开接口），
+  `provider-registry` 仍然零依赖且不反向依赖 gateway。详见
+  [HTTP 传输与凭据边界](http-transport.md)。
+
+- **本阶段仍未连接任何真实供应商**：生产 transport 代码存在，但没有做过真实
+  端到端验证，也没有验证过真实 API key 或真实供应商错误。
+
 
 ### 后续任务（未实现）
 
-真实 HTTP 传输与认证注入、Provider 路由调度、重试与故障转移、Provider / Route /
-凭据持久化、Agent Loop、工具执行、审批、会话存储、Desktop/CLI 入口等。
+重试与故障转移、Provider 轮换、探活与模型列表请求、Provider / Route / 凭据持久化、
+Agent Loop、工具执行、审批、会话存储、Desktop/CLI 入口等。
