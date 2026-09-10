@@ -33,6 +33,77 @@ describe("agent contracts", () => {
     expect(() => validateAgentMessages(messages)).not.toThrow();
   });
 
+  it("accepts all four runtime-validated message roles", () => {
+    for (const role of ["system", "user", "assistant", "tool"] as const) {
+      const messages = [
+        { role, content: [{ type: "text", text: "hello" }] },
+      ] as AgentMessage[];
+      expect(() => validateAgentMessages(messages), role).not.toThrow();
+    }
+  });
+
+  it("rejects an unknown message role with the invalid_role code", () => {
+    const messages = [
+      { role: "unknown", content: [{ type: "text", text: "hi" }] },
+    ] as unknown as AgentMessage[];
+
+    let error: unknown;
+    try {
+      validateAgentMessages(messages);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(AgentValidationError);
+    expect((error as AgentValidationError).code).toBe("invalid_role");
+  });
+
+  it("rejects a provider role with the invalid_role code", () => {
+    const messages = [
+      { role: "provider", content: [{ type: "text", text: "hi" }] },
+    ] as unknown as AgentMessage[];
+
+    let error: unknown;
+    try {
+      validateAgentMessages(messages);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(AgentValidationError);
+    expect((error as AgentValidationError).code).toBe("invalid_role");
+  });
+
+  it("does not leak sensitive values from the input when rejecting an invalid role", () => {
+    const secret = "TOP_SECRET_ROLE_LEAK_VALUE_7c1f";
+    const messages = [
+      {
+        role: "provider",
+        content: [{ type: "text", text: `https://provider.example/v1 ${secret}` }],
+        apiKey: secret,
+        token: secret,
+        authorization: `Bearer ${secret}`,
+      },
+    ] as unknown as AgentMessage[];
+
+    let message = "";
+    let code = "";
+    try {
+      validateAgentMessages(messages);
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+      code = error instanceof AgentValidationError ? error.code : "";
+    }
+
+    expect(code).toBe("invalid_role");
+    expect(message).not.toContain(secret);
+    expect(message).not.toMatch(/https?:\/\//i);
+    expect(message).not.toMatch(/authorization/i);
+    expect(message).not.toMatch(/token/i);
+    expect(message).not.toMatch(/api[_-]?key/i);
+    expect(message).not.toMatch(/\bprovider\b/i);
+  });
+
   it("rejects a tool result that references an unknown toolCallId", () => {
     const messages: AgentMessage[] = [
       {

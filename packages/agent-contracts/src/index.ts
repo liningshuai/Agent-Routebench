@@ -14,6 +14,4 @@ export {
   validateAgentToolDefinitions,
   validateModelRequest,
 } from "./contracts.js";
-export type { ModelGateway, ModelStreamEvent } from "@agent-workbench/agent-contracts";
-export type { AgentCore, AgentEvent } from "./agent-core.js";
-export { createAgentCore } from "./agent-core.js";
+export type { ModelGateway, ModelStreamEvent } from "./gateway-contracts.js";

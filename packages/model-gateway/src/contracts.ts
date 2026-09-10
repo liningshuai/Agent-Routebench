@@ -1,34 +1,9 @@
-import type { JsonValue, ModelRequest } from "../../agent-core/src/contracts.js";
-
-export type ModelStreamEvent =
-  | {
-      readonly type: "text_delta";
-      readonly text: string;
-    }
-  | {
-      readonly type: "tool_call";
-      readonly id: string;
-      readonly name: string;
-      readonly input: JsonValue;
-    }
-  | {
-      readonly type: "usage";
-      readonly inputTokens: number;
-      readonly outputTokens: number;
-    }
-  | {
-      readonly type: "completed";
-    }
-  | {
-      readonly type: "error";
-      readonly code: string;
-      readonly message: string;
-      readonly retryable: boolean;
-    };
-
-export interface ModelGateway {
-  stream(
-    request: ModelRequest,
-    signal?: AbortSignal,
-  ): AsyncIterable<ModelStreamEvent>;
-}
+// Compatibility re-export layer.
+//
+// The single real implementation of these contracts lives in
+// `@agent-workbench/agent-contracts`. This file exists only so that existing
+// relative imports keep working; it must never define its own implementation.
+export type {
+  ModelGateway,
+  ModelStreamEvent,
+} from "@agent-workbench/agent-contracts";

@@ -163,6 +163,7 @@ describe("agent core", () => {
       expect(errorEvent.code).toBe("gateway_error");
       expect(errorEvent.requestId).toBe("req-100");
       expect(errorEvent.retryable).toBe(false);
+      expect(errorEvent.message).toBe("Model gateway request failed.");
       expect(errorEvent.message).not.toContain("ECONNREFUSED");
       expect(errorEvent.message).not.toContain("api.example.invalid");
       expect(errorEvent.message).not.toContain("Bearer");
@@ -171,7 +172,7 @@ describe("agent core", () => {
     }
   });
 
-  it("forwards gateway error events without leaking raw transport details", async () => {
+  it("forwards a whitelisted gateway error code with a fixed safe message", async () => {
     const gateway = new DeterministicFakeModelGateway({
       events: [
         {
@@ -191,13 +192,96 @@ describe("agent core", () => {
       type: "error",
       requestId: "req-100",
       code: "upstream_unavailable",
-      message: "Provider unavailable",
+      message: "Model gateway request failed.",
       retryable: true,
     });
     const serialized = JSON.stringify(errorEvent);
     expect(serialized).not.toMatch(/https?:\/\//i);
     expect(serialized).not.toMatch(/authorization/i);
     expect(serialized).not.toMatch(/api[_-]?key/i);
+    expect(serialized).not.toContain("Provider unavailable");
+  });
+
+  it("sanitizes a malicious gateway error event without leaking transport details", async () => {
+    const maliciousRawStackTrace = [
+      "Error: connect ECONNREFUSED https://provider.example/v1",
+      "    at Socket.connect (node:net:1234:5)",
+      "    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:5678:9)",
+    ].join("\n");
+    const maliciousMessage = [
+      "connect ECONNREFUSED https://provider.example/v1",
+      "Authorization: Bearer sk-secret-value",
+      maliciousRawStackTrace,
+    ].join("\n");
+
+    const gateway: ModelGateway = {
+      stream: async function* stream() {
+        yield {
+          type: "error",
+          code: "provider_internal_error",
+          message: maliciousMessage,
+          retryable: true,
+        } satisfies ModelStreamEvent;
+      },
+    };
+    const core = createAgentCore(gateway);
+
+    const events = await collect(core.run(makeRequest()));
+    const errorEvent = events.find((event) => event.type === "error");
+
+    expect(errorEvent).toBeDefined();
+    if (errorEvent?.type !== "error") {
+      throw new Error("expected an error event");
+    }
+
+    expect(errorEvent.code).toBe("gateway_error");
+    expect(errorEvent.message).toBe("Model gateway request failed.");
+    expect(errorEvent.retryable).toBe(true);
+
+    const serialized = JSON.stringify(errorEvent);
+    expect(serialized).not.toContain("provider.example");
+    expect(serialized).not.toContain("Authorization");
+    expect(serialized).not.toContain("Bearer");
+    expect(serialized).not.toContain("sk-secret-value");
+    expect(serialized).not.toContain("ECONNREFUSED");
+    expect(serialized).not.toContain("Socket.connect");
+    expect(serialized).not.toContain("node:net");
+    expect(serialized).not.toMatch(/https?:\/\//i);
+    expect(serialized).not.toMatch(/authorization/i);
+    expect(serialized).not.toMatch(/token/i);
+    expect(serialized).not.toMatch(/secret/i);
+    expect(serialized).not.toMatch(/headers/i);
+  });
+
+  it("does not leak raw error text when the gateway error event is aborted", async () => {
+    const gateway: ModelGateway = {
+      stream: async function* stream() {
+        yield {
+          type: "error",
+          code: "aborted",
+          message:
+            "aborted by user after GET https://provider.example/v1 with Authorization: Bearer sk-secret-value",
+          retryable: false,
+        } satisfies ModelStreamEvent;
+      },
+    };
+    const core = createAgentCore(gateway);
+
+    const events = await collect(core.run(makeRequest()));
+    const errorEvent = events.find((event) => event.type === "error");
+
+    expect(errorEvent).toEqual({
+      type: "error",
+      requestId: "req-100",
+      code: "aborted",
+      message: "Request aborted.",
+      retryable: false,
+    });
+    const serialized = JSON.stringify(errorEvent);
+    expect(serialized).not.toContain("provider.example");
+    expect(serialized).not.toContain("Authorization");
+    expect(serialized).not.toContain("Bearer");
+    expect(serialized).not.toContain("sk-secret-value");
   });
 
   it("does not execute tools or start a second model request", async () => {

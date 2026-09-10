@@ -1,6 +1,13 @@
-import type { JsonValue, ModelRequest } from "./contracts.js";
-import { AgentValidationError, validateModelRequest } from "./contracts.js";
-import type { ModelGateway, ModelStreamEvent } from "../../model-gateway/src/contracts.js";
+import type {
+  JsonValue,
+  ModelGateway,
+  ModelRequest,
+  ModelStreamEvent,
+} from "@agent-workbench/agent-contracts";
+import {
+  AgentValidationError,
+  validateModelRequest,
+} from "@agent-workbench/agent-contracts";
 
 export type AgentEvent =
   | {
@@ -44,6 +51,47 @@ export interface AgentCore {
     request: ModelRequest,
     signal?: AbortSignal,
   ): AsyncIterable<AgentEvent>;
+}
+
+/**
+ * Only these gateway error codes may reach the Agent event stream. Anything
+ * else is collapsed into `gateway_error` so that provider-specific codes cannot
+ * become an unbounded, attacker-influenced surface.
+ */
+const SAFE_GATEWAY_ERROR_CODES: ReadonlySet<string> = new Set([
+  "aborted",
+  "rate_limited",
+  "upstream_unavailable",
+  "provider_protocol_error",
+  "gateway_error",
+]);
+
+const GATEWAY_ERROR_MESSAGE = "Model gateway request failed.";
+const GATEWAY_ABORTED_MESSAGE = "Request aborted.";
+
+/**
+ * Builds an error event from a gateway failure without ever forwarding the raw
+ * gateway message. Raw transport text can embed URLs, Authorization headers,
+ * API keys, tokens, request headers, provider payloads and stack traces.
+ */
+function sanitizedGatewayError(
+  requestId: string,
+  code: unknown,
+  retryable: unknown,
+): AgentEvent {
+  const safeCode =
+    typeof code === "string" && SAFE_GATEWAY_ERROR_CODES.has(code)
+      ? code
+      : "gateway_error";
+
+  return {
+    type: "error",
+    requestId,
+    code: safeCode,
+    message:
+      safeCode === "aborted" ? GATEWAY_ABORTED_MESSAGE : GATEWAY_ERROR_MESSAGE,
+    retryable: retryable === true,
+  };
 }
 
 function invalidRequestError(request: ModelRequest, error: unknown): AgentEvent {
@@ -101,23 +149,11 @@ function mapGatewayEvent(
         requestId,
       };
     case "error":
-      return {
-        type: "error",
-        requestId,
-        code: event.code,
-        message: event.message,
-        retryable: event.retryable,
-      };
+      return sanitizedGatewayError(requestId, event.code, event.retryable);
     default: {
       const exhaustive: never = event;
       void exhaustive;
-      return {
-        type: "error",
-        requestId,
-        code: "gateway_error",
-        message: "Model gateway produced an unknown event.",
-        retryable: false,
-      };
+      return sanitizedGatewayError(requestId, "gateway_error", false);
     }
   }
 }
@@ -148,7 +184,7 @@ export function createAgentCore(gateway: ModelGateway): AgentCore {
           type: "error",
           requestId: request.requestId,
           code: "gateway_error",
-          message: "Model gateway failed while streaming the response.",
+          message: GATEWAY_ERROR_MESSAGE,
           retryable: false,
         };
       }

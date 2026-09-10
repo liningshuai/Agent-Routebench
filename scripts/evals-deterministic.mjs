@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
 
 // Deterministic offline eval entry. Covers Task 0 engineering baseline and
-// Task 1 shared contracts + offline gateway files. No network, no model calls.
+// Task 1 neutral contracts + offline gateway files. No network, no model calls.
 const required = [
   "package.json",
   "pnpm-workspace.yaml",
@@ -18,6 +18,10 @@ const required = [
   "docs/architecture.md",
   "docs/licensing.md",
   "scripts/verify-layout.mjs",
+  "packages/agent-contracts/package.json",
+  "packages/agent-contracts/src/contracts.ts",
+  "packages/agent-contracts/src/gateway-contracts.ts",
+  "packages/agent-contracts/src/index.ts",
   "packages/agent-core/package.json",
   "packages/agent-core/src/contracts.ts",
   "packages/agent-core/src/agent-core.ts",
@@ -26,6 +30,7 @@ const required = [
   "packages/model-gateway/src/contracts.ts",
   "packages/model-gateway/src/fake-gateway.ts",
   "packages/model-gateway/src/index.ts",
+  "tests/task-1-package-boundary.test.ts",
   "tests/task-1-agent-contracts.test.ts",
   "tests/task-1-fake-gateway.test.ts",
   "tests/task-1-agent-core.test.ts",
@@ -36,5 +41,5 @@ for (const path of required) {
 }
 
 console.log(
-  "evals:deterministic passed (Task 0 baseline + Task 1 offline contracts and fake gateway files present; no model calls).",
+  "evals:deterministic passed (Task 0 baseline + Task 1 neutral shared contracts, offline fake gateway and package-boundary files present; no real model calls, no provider adapters).",
 );

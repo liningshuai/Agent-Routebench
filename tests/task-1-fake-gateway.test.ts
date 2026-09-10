@@ -150,6 +150,65 @@ describe("deterministic fake model gateway", () => {
     }
   });
 
+  it("constructor deep-clones nested tool input", async () => {
+    const nestedInput = {
+      query: "search",
+      filters: { tags: ["a", "b"], limit: 3 },
+      flags: [true, null, 1.5],
+      nested: { deeper: { value: "original" } },
+    };
+    const events: ModelStreamEvent[] = [
+      { type: "tool_call", id: "call-9", name: "search", input: nestedInput },
+      { type: "completed" },
+    ];
+    const gateway = new DeterministicFakeModelGateway({ events });
+
+    nestedInput.query = "mutated";
+    nestedInput.filters.tags.push("mutated");
+    nestedInput.nested.deeper.value = "mutated";
+
+    const received = await collect(gateway.stream(makeRequest()));
+
+    expect(received[0]).toEqual({
+      type: "tool_call",
+      id: "call-9",
+      name: "search",
+      input: {
+        query: "search",
+        filters: { tags: ["a", "b"], limit: 3 },
+        flags: [true, null, 1.5],
+        nested: { deeper: { value: "original" } },
+      },
+    });
+  });
+
+  it("emits aborted and stops mid-stream when the signal aborts", async () => {
+    const gateway = new DeterministicFakeModelGateway({
+      events: [
+        { type: "text_delta", text: "first" },
+        { type: "text_delta", text: "second" },
+        { type: "completed" },
+      ],
+    });
+    const controller = new AbortController();
+
+    const received: ModelStreamEvent[] = [];
+    for await (const event of gateway.stream(makeRequest(), controller.signal)) {
+      received.push(event);
+      if (event.type === "text_delta") {
+        controller.abort();
+      }
+    }
+
+    expect(received.map((event) => event.type)).toEqual(["text_delta", "error"]);
+    expect(received[received.length - 1]).toEqual({
+      type: "error",
+      code: "aborted",
+      message: "Request aborted before completion.",
+      retryable: false,
+    });
+  });
+
   it("does not emit completed when the signal is already aborted", async () => {
     const gateway = new DeterministicFakeModelGateway({
       events: [

@@ -5,6 +5,6 @@
   "type": "module",
   "description": "Model Gateway contract and deterministic offline fake gateway",
   "dependencies": {
-    "@agent-workbench/agent-core": "workspace:*"
+    "@agent-workbench/agent-contracts": "workspace:*"
   }
 }

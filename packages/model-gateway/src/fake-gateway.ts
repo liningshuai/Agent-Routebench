@@ -1,5 +1,8 @@
-import type { ModelRequest } from "../../agent-core/src/contracts.js";
-import type { ModelGateway, ModelStreamEvent } from "./contracts.js";
+import type {
+  ModelGateway,
+  ModelRequest,
+  ModelStreamEvent,
+} from "@agent-workbench/agent-contracts";
 
 export interface FakeGatewayOptions {
   readonly events: readonly ModelStreamEvent[];

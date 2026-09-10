@@ -3,5 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Shared Agent Core contracts and runtime validation"
+  "description": "Shared Agent Core contracts and runtime validation",
+  "dependencies": {
+    "@agent-workbench/agent-contracts": "workspace:*"
+  }
 }
