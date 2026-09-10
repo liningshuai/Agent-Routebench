@@ -8,12 +8,18 @@ importers:
 
   .:
     devDependencies:
+      '@agent-workbench/agent-contracts':
+        specifier: workspace:*
+        version: link:packages/agent-contracts
       '@agent-workbench/agent-core':
         specifier: workspace:*
         version: link:packages/agent-core
       '@agent-workbench/agent-runtime':
         specifier: workspace:*
         version: link:packages/agent-runtime
+      '@agent-workbench/local-agent-api':
+        specifier: workspace:*
+        version: link:packages/local-agent-api
       '@agent-workbench/local-persistence':
         specifier: workspace:*
         version: link:packages/local-persistence
@@ -42,6 +48,15 @@ importers:
         version: link:../agent-contracts
 
   packages/agent-runtime:
+    dependencies:
+      '@agent-workbench/agent-contracts':
+        specifier: workspace:*
+        version: link:../agent-contracts
+      '@agent-workbench/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
+
+  packages/local-agent-api:
     dependencies:
       '@agent-workbench/agent-contracts':
         specifier: workspace:*

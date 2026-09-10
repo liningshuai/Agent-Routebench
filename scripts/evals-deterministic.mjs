@@ -41,6 +41,8 @@ const required = [
   "docs/verification/task-7-report.md",
   "docs/local-persistence.md",
   "docs/verification/task-8-report.md",
+  "docs/local-agent-api.md",
+  "docs/verification/task-9-report.md",
   "scripts/verify-layout.mjs",
   "packages/agent-contracts/package.json",
   "packages/agent-contracts/src/contracts.ts",
@@ -91,6 +93,15 @@ const required = [
   "packages/local-persistence/src/json-store.ts",
   "packages/local-persistence/src/file-store.ts",
   "packages/local-persistence/src/index.ts",
+  "packages/local-agent-api/package.json",
+  "packages/local-agent-api/tsconfig.json",
+  "packages/local-agent-api/src/types.ts",
+  "packages/local-agent-api/src/errors.ts",
+  "packages/local-agent-api/src/validation.ts",
+  "packages/local-agent-api/src/session-store.ts",
+  "packages/local-agent-api/src/ndjson.ts",
+  "packages/local-agent-api/src/server.ts",
+  "packages/local-agent-api/src/index.ts",
   "tests/helpers/adapter-fixtures.ts",
   "tests/helpers/http-fixtures.ts",
   "tests/helpers/runtime-fixtures.ts",
@@ -121,6 +132,11 @@ const required = [
   "tests/task-8-persistence-file.test.ts",
   "tests/task-8-persistence-security.test.ts",
   "tests/task-8-persistence-concurrency.test.ts",
+  "tests/helpers/local-agent-api-fixtures.ts",
+  "tests/task-9-local-api.test.ts",
+  "tests/task-9-local-api-streaming.test.ts",
+  "tests/task-9-local-api-security.test.ts",
+  "tests/task-9-local-api-concurrency.test.ts",
 ];
 
 for (const path of required) {
@@ -195,6 +211,13 @@ runScenario("task 8 non-secret config persistence", [
   "tests/task-8-persistence-concurrency.test.ts",
 ]);
 
+runScenario("task 9 local agent API", [
+  "tests/task-9-local-api.test.ts",
+  "tests/task-9-local-api-streaming.test.ts",
+  "tests/task-9-local-api-security.test.ts",
+  "tests/task-9-local-api-concurrency.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -228,5 +251,9 @@ console.log(
     "Authorization headers are never written to a snapshot or a file. The file scenarios",
     "use temporary directories only; no network access happens and no real provider is",
     "contacted.",
+    "Task 9 adds the loopback-only Local Agent API: session lifecycle, an injected",
+    "LocalAgentRunner, NDJSON incremental event streaming, per-session cancellation and",
+    "fixed safe errors. The scenarios bind only 127.0.0.1, never call a real provider,",
+    "never read a CredentialStore and never persist a session to disk.",
   ].join(" "),
 );

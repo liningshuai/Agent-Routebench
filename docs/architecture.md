@@ -421,7 +421,34 @@ Atomic Local File Store (temp + rename)
   Local Agent API、CLI 或 Desktop。详见 [Local Persistence](local-persistence.md)。
 
 
+### Task 9（已完成）
+
+新增 `@agent-workbench/local-agent-api`：Desktop / CLI 共享的本机回环 HTTP 控制面。
+
+```text
+Desktop / CLI
+      ↓
+Local Agent API (loopback 127.0.0.1 / localhost)
+      ↓
+LocalAgentRunner (injected)
+      ↓
+Agent Core / Runtime (future)
+```
+
+边界：
+
+- 仅绑定回环地址；拒绝 `0.0.0.0`、`::` 与远程 host。
+- Session 创建 / 查询 / 运行 / 取消；内存存储，不落盘。
+- `POST /v1/sessions/:id/turns` 以 NDJSON 增量输出 `AgentEvent`。
+- Session 内单并发（`409 session_busy`）；不同 Session 与不同 Server 实例完全隔离。
+- 注入式 `LocalAgentRunner`；本包不调用 Provider、不读 CredentialStore。
+- 固定安全错误；递归拒绝敏感字段；无 CORS、不读环境变量、不写文件。
+- 依赖方向：`local-agent-api → agent-contracts / agent-core`；不依赖
+  model-gateway、provider-registry、local-persistence。
+- 详见 [Local Agent API](local-agent-api.md)。
+
+
 ### 后续任务（未实现）
 
 探活与模型列表请求、CredentialStore / OS Keychain 持久化、审批 UI 与自动批准策略、
-Local Agent API、CLI、Desktop/Tauri 入口、会话存储、Memory、上下文压缩等。
+CLI、Desktop/Tauri 入口、会话持久化、Memory、上下文压缩等。

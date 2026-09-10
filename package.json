@@ -17,8 +17,10 @@
     "verify:layout": "node scripts/verify-layout.mjs"
   },
   "devDependencies": {
+    "@agent-workbench/agent-contracts": "workspace:*",
     "@agent-workbench/agent-core": "workspace:*",
     "@agent-workbench/agent-runtime": "workspace:*",
+    "@agent-workbench/local-agent-api": "workspace:*",
     "@agent-workbench/local-persistence": "workspace:*",
     "@agent-workbench/model-gateway": "workspace:*",
     "@agent-workbench/provider-registry": "workspace:*",

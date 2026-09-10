@@ -4,13 +4,12 @@
 
 ## 当前阶段
 
-**Task 8：非敏感 Provider / Route 配置持久化**（Task 7 之上）。在既有能力之上新增：
+**Task 9：Local Agent API v1**（loopback HTTP 控制面）。在既有能力之上新增：
 
-- `@agent-workbench/local-persistence`：版本化配置快照 + JSON Store + 原子文件写入
-- 只持久化 Provider / Route 非敏感字段与 `credentialRef` 引用
-- secret / API Key / Token / Authorization / headers 永不进入快照或文件
-- InMemory 与 File 两种 Store，save 串行化，load 深拷贝隔离
-- 稳定 `PersistenceError` 错误码，message 不回显路径/JSON/ID/URL/fs 异常
+- `@agent-workbench/local-agent-api`：本机回环 HTTP API
+- Session 创建 / 查询 / 运行 / 取消；注入式 `LocalAgentRunner`
+- NDJSON 增量事件流；Session 内单并发；不同 Session 隔离
+- 固定安全错误；不读凭据、不调 Provider、不持久化 Session
 
 此前已有：
 
