@@ -141,7 +141,8 @@ console.log(
     "The routed transport is always exercised with an injected fake HTTP client, which",
     "verifies route resolution, the credential reference boundary, request construction,",
     "HTTP status mapping and incremental offline streaming.",
-    "No real provider calls. No real network access. No authentication is sent anywhere.",
+    "No real provider calls. No real network access. Authentication headers are exercised",
+    "only by the injected fake HTTP client; nothing is sent to a real provider.",
     "No persisted credentials.",
   ].join(" "),
 );

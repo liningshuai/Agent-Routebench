@@ -35,8 +35,8 @@
 | `packages/model-gateway/src/http-transport.ts` | `HttpRequest` / `HttpResponse` / `HttpClient` 契约；URL 拼接；认证头构造；状态码映射；body 释放；基于 Node 24 原生 `fetch` 的默认客户端 |
 | `packages/model-gateway/src/routed-http-gateway.ts` | `RoutedHttpModelGateway` / `createRoutedHttpModelGateway`：路由解析、凭据读取、编码、单次 HTTP 调用、增量解码、取消传播 |
 | `tests/helpers/http-fixtures.ts` | 离线 fixture：fake `HttpClient`、Provider/Route/Credential 构造、SSE 载荷、header 大小写无关读取 |
-| `tests/task-4-http-gateway.test.ts` | 路由与凭据边界、请求构造、HTTP 状态与传输错误映射、默认客户端（44 tests） |
-| `tests/task-4-http-security.test.ts` | 运行时秘密泄露边界 + 源码级包/依赖/网络边界（18 tests） |
+| `tests/task-4-http-gateway.test.ts` | 路由与凭据边界、请求构造、HTTP 状态与传输错误映射、默认客户端（45 tests） |
+| `tests/task-4-http-security.test.ts` | 运行时秘密泄露边界 + 源码级包/依赖/网络边界（17 tests） |
 | `tests/task-4-http-integration.test.ts` | 增量流式、取消与资源释放、并发隔离、Agent Core 集成（19 tests） |
 | `docs/http-transport.md` | HTTP 传输公开接口、请求规则、错误映射、凭据边界文档 |
 
