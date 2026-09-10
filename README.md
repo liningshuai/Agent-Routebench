@@ -4,7 +4,15 @@
 
 ## 当前阶段
 
-**Task 7：Tool Policy、审批闸门与安全工具执行边界**（Task 6 之上）。仓库目前包含：
+**Task 8：非敏感 Provider / Route 配置持久化**（Task 7 之上）。在既有能力之上新增：
+
+- `@agent-workbench/local-persistence`：版本化配置快照 + JSON Store + 原子文件写入
+- 只持久化 Provider / Route 非敏感字段与 `credentialRef` 引用
+- secret / API Key / Token / Authorization / headers 永不进入快照或文件
+- InMemory 与 File 两种 Store，save 串行化，load 深拷贝隔离
+- 稳定 `PersistenceError` 错误码，message 不回显路径/JSON/ID/URL/fs 异常
+
+此前已有：
 
 - pnpm workspace 与 TypeScript 基础配置
 - Vitest 测试入口

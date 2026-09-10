@@ -17,6 +17,9 @@ const SECRET_PATTERNS = [
   { name: "private key block", re: /-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
 ];
 
+// Project convention: synthetic markers used by offline tests and docs are not secrets.
+const SYNTHETIC_ALLOWLIST = /SYNTHETIC_SECRET|TASK\d+_SYNTHETIC/i;
+
 function listFiles(dir) {
   const out = [];
   for (const entry of readdirSync(dir)) {
@@ -53,7 +56,16 @@ for (const file of files) {
   const rel = relative(root, file);
   const text = readFileSync(file, "utf8");
   for (const { name, re } of SECRET_PATTERNS) {
-    if (re.test(text)) {
+    const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
+    const globalRe = new RegExp(re.source, flags);
+    let hasRealMatch = false;
+    for (const match of text.matchAll(globalRe)) {
+      if (!SYNTHETIC_ALLOWLIST.test(match[0])) {
+        hasRealMatch = true;
+        break;
+      }
+    }
+    if (hasRealMatch) {
       findings.push(`${rel}: possible secret (${name})`);
     }
   }

@@ -14,6 +14,9 @@ importers:
       '@agent-workbench/agent-runtime':
         specifier: workspace:*
         version: link:packages/agent-runtime
+      '@agent-workbench/local-persistence':
+        specifier: workspace:*
+        version: link:packages/local-persistence
       '@agent-workbench/model-gateway':
         specifier: workspace:*
         version: link:packages/model-gateway
@@ -46,6 +49,12 @@ importers:
       '@agent-workbench/agent-core':
         specifier: workspace:*
         version: link:../agent-core
+
+  packages/local-persistence:
+    dependencies:
+      '@agent-workbench/provider-registry':
+        specifier: workspace:*
+        version: link:../provider-registry
 
   packages/model-gateway:
     dependencies:

@@ -39,6 +39,8 @@ const required = [
   "docs/verification/task-6-report.md",
   "docs/tool-policy.md",
   "docs/verification/task-7-report.md",
+  "docs/local-persistence.md",
+  "docs/verification/task-8-report.md",
   "scripts/verify-layout.mjs",
   "packages/agent-contracts/package.json",
   "packages/agent-contracts/src/contracts.ts",
@@ -81,6 +83,14 @@ const required = [
   "packages/agent-runtime/src/errors.ts",
   "packages/agent-runtime/src/agent-loop.ts",
   "packages/agent-runtime/src/index.ts",
+  "packages/local-persistence/package.json",
+  "packages/local-persistence/tsconfig.json",
+  "packages/local-persistence/src/types.ts",
+  "packages/local-persistence/src/errors.ts",
+  "packages/local-persistence/src/snapshot.ts",
+  "packages/local-persistence/src/json-store.ts",
+  "packages/local-persistence/src/file-store.ts",
+  "packages/local-persistence/src/index.ts",
   "tests/helpers/adapter-fixtures.ts",
   "tests/helpers/http-fixtures.ts",
   "tests/helpers/runtime-fixtures.ts",
@@ -104,6 +114,13 @@ const required = [
   "tests/task-6-agent-runtime.test.ts",
   "tests/task-6-agent-runtime-security.test.ts",
   "tests/task-6-agent-runtime-cancellation.test.ts",
+  "tests/task-7-tool-policy.test.ts",
+  "tests/task-7-tool-policy-security.test.ts",
+  "tests/task-7-tool-policy-cancellation.test.ts",
+  "tests/task-8-persistence-snapshot.test.ts",
+  "tests/task-8-persistence-file.test.ts",
+  "tests/task-8-persistence-security.test.ts",
+  "tests/task-8-persistence-concurrency.test.ts",
 ];
 
 for (const path of required) {
@@ -171,6 +188,13 @@ runScenario("task 7 tool policy and approval gate", [
   "tests/task-7-tool-policy-cancellation.test.ts",
 ]);
 
+runScenario("task 8 non-secret config persistence", [
+  "tests/task-8-persistence-snapshot.test.ts",
+  "tests/task-8-persistence-file.test.ts",
+  "tests/task-8-persistence-security.test.ts",
+  "tests/task-8-persistence-concurrency.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -198,5 +222,11 @@ console.log(
     "into a fixed safe result. The policy, the approval handler and the executor in these",
     "scenarios are all injected fakes; there is no real tool, no approval persistence, no",
     "remember-decision mechanism, no approval UI and no network access.",
+    "Task 8 adds versioned non-secret provider/route config persistence: snapshot creation",
+    "and validation, an in-memory JSON store, an atomic file store (sibling temp + rename),",
+    "and registry load/save. Secrets, CredentialStore values, API keys, tokens and",
+    "Authorization headers are never written to a snapshot or a file. The file scenarios",
+    "use temporary directories only; no network access happens and no real provider is",
+    "contacted.",
   ].join(" "),
 );

@@ -391,7 +391,37 @@ ToolExecutionRequest → ToolPolicy → allow / deny / ask → ToolApprovalHandl
   详见 [Tool Policy 与审批闸门](tool-policy.md)。
 
 
+### Task 8（已完成）
+
+新增 `@agent-workbench/local-persistence`，用于持久化**非敏感** Provider / Route 配置：
+
+```text
+ProviderRegistry
+        ↓
+Versioned Config Snapshot (PersistedConfigV1, version: 1)
+        ↓
+JSON Config Store (InMemoryJsonConfigStore / FileJsonConfigStore)
+        ↓
+Atomic Local File Store (temp + rename)
+```
+
+边界：
+
+- 只保存 Provider 的 `id / name / protocol / baseUrl / credentialRef / models / enabled`
+  与 Route 的 `id / name / providerId / model / enabled / fallbackProviderIds`。
+- `credentialRef` 仅为 `credential:<id>` 引用；secret、CredentialStore 内容、
+  环境变量密钥、headers 永不进入快照或文件。
+- 校验拒绝未知字段、敏感字段、循环对象、`undefined`、非有限数字与不一致的
+  enabled / model / provider 关系；错误 message 固定，不回显路径或 JSON。
+- 文件保存采用 validate → serialize → sibling temp → rename；同一 store 的 save
+  串行化；rename 失败不伪造成功。
+- 依赖方向：`local-persistence → provider-registry`；provider-registry 不依赖
+  local-persistence，也不引入 `node:fs`。
+- 仍未连接真实供应商，不持久化 secret，不实现 OS Keychain、Session、Memory、
+  Local Agent API、CLI 或 Desktop。详见 [Local Persistence](local-persistence.md)。
+
+
 ### 后续任务（未实现）
 
-探活与模型列表请求、Provider / Route / 凭据持久化、审批 UI 与自动批准策略、
+探活与模型列表请求、CredentialStore / OS Keychain 持久化、审批 UI 与自动批准策略、
 Local Agent API、CLI、Desktop/Tauri 入口、会话存储、Memory、上下文压缩等。
