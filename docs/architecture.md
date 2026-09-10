@@ -59,5 +59,28 @@ Model Gateway 之下规划两类协议适配：
 
 ## 当前实现状态
 
-Task 0 只建立工程基线（workspace、类型检查、测试、许可证与文档）。
-上述运行时组件尚未实现，也尚未发生任何真实模型调用。
+### Task 0（已完成）
+
+工程基线：workspace、类型检查、测试、许可证与文档。
+
+### Task 1（已完成）
+
+已建立协议无关的内部契约与完全离线的 Model Gateway 测试实现：
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| Agent Core 契约 | `packages/agent-core/src/contracts.ts` | 统一消息、工具调用/结果、工具定义、ModelRequest 与运行时校验 |
+| Agent Core | `packages/agent-core/src/agent-core.ts` | 校验请求后按顺序产出 `AgentEvent`；不执行工具、不发第二轮请求 |
+| Model Gateway 契约 | `packages/model-gateway/src/contracts.ts` | `ModelGateway` 接口与 `ModelStreamEvent` 流事件 |
+| Deterministic Fake Gateway | `packages/model-gateway/src/fake-gateway.ts` | 离线、可重复的事件回放；无网络调用 |
+
+边界：
+
+- Desktop / CLI 尚未接入；当前只有共享契约与 Fake Gateway。
+- `ModelRequest` 不含 apiKey、token、authorization、headers、baseUrl、endpoint 等凭据字段。
+- Provider 凭据仍不得进入事件流；未来由 Provider 配置层在真实 Gateway 出站时注入。
+- **当前仍没有真实模型调用**，也没有 Anthropic / OpenAI-compatible 适配器。
+
+### 后续任务（未实现）
+
+真实 Model Gateway 适配器、Agent Loop 重试、工具执行、审批、会话存储、Desktop/CLI 入口等。

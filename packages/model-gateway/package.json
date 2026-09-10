@@ -1,0 +1,10 @@
+{
+  "name": "@agent-workbench/model-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Model Gateway contract and deterministic offline fake gateway",
+  "dependencies": {
+    "@agent-workbench/agent-core": "workspace:*"
+  }
+}

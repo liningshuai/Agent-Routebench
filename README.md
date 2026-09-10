@@ -4,20 +4,26 @@
 
 ## 当前阶段
 
-**工程基线（Task 0）**。仓库目前只包含：
+**Task 1：共享 Agent Core 契约与离线 Model Gateway**（Task 0 工程基线之上）。仓库目前包含：
 
 - pnpm workspace 与 TypeScript 基础配置
 - Vitest 测试入口
-- 布局验证、类型检查、安全扫描占位脚本、确定性评测占位脚本
+- 布局验证、类型检查、安全扫描脚本、确定性评测脚本
 - Apache-2.0 许可证与架构/许可边界文档
+- 协议无关的 Agent Core 消息/工具/请求契约与运行时校验
+- `ModelGateway` 接口、`ModelStreamEvent` 流事件
+- 完全离线、确定性的 `DeterministicFakeModelGateway`
+- 覆盖契约、Fake Gateway 与 Agent Core 行为的离线测试
 
 当前**还没有**：
 
-- 真实模型调用
-- Agent Loop、Model Gateway、Adapter
-- Provider / Route 管理
+- 真实模型调用与网络请求
+- Anthropic Messages / OpenAI-compatible 真实适配器
+- Provider / Route 管理与凭据存储
 - 桌面端（Tauri）与 CLI 功能
-- 会话存储、工具执行、审批机制、记忆系统
+- 会话数据库、工具执行器、审批机制、记忆系统、上下文压缩
+
+所有测试默认离线运行，不依赖外部网络服务。
 
 ## 目标
 

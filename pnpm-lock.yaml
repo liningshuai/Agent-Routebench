@@ -8,6 +8,12 @@ importers:
 
   .:
     devDependencies:
+      '@agent-workbench/agent-core':
+        specifier: workspace:*
+        version: link:packages/agent-core
+      '@agent-workbench/model-gateway':
+        specifier: workspace:*
+        version: link:packages/model-gateway
       '@types/node':
         specifier: ^24.10.1
         version: 24.13.3
@@ -17,6 +23,14 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@24.13.3)
+
+  packages/agent-core: {}
+
+  packages/model-gateway:
+    dependencies:
+      '@agent-workbench/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
 
 packages:
 

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
-const SCAN_ROOTS = ["scripts", "tests", "docs"];
+const SCAN_ROOTS = ["scripts", "tests", "docs", "packages"];
 const FORBIDDEN_PACKAGE_PATTERNS = [
   /cc-switch-agent/i,
   /cc[-_ ]?switch/i,

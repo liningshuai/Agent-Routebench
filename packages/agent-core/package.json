@@ -1,0 +1,7 @@
+{
+  "name": "@agent-workbench/agent-core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared Agent Core contracts and runtime validation"
+}
