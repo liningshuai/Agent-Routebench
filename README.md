@@ -4,26 +4,34 @@
 
 ## 当前阶段
 
-**Task 1：共享 Agent Core 契约与离线 Model Gateway**（Task 0 工程基线之上）。仓库目前包含：
+**Task 2：Provider / Route Registry 与凭据边界**（Task 1 离线契约之上）。仓库目前包含：
 
 - pnpm workspace 与 TypeScript 基础配置
 - Vitest 测试入口
 - 布局验证、类型检查、安全扫描脚本、确定性评测脚本
 - Apache-2.0 许可证与架构/许可边界文档
+- 中立共享契约包 `@agent-workbench/agent-contracts`
 - 协议无关的 Agent Core 消息/工具/请求契约与运行时校验
 - `ModelGateway` 接口、`ModelStreamEvent` 流事件
 - 完全离线、确定性的 `DeterministicFakeModelGateway`
-- 覆盖契约、Fake Gateway 与 Agent Core 行为的离线测试
+- **本地内存 Provider / Route 配置核心 `@agent-workbench/provider-registry`**
+  - `anthropic_messages` 与 `openai_compatible` 两种协议类型
+  - 官方 Provider 预设（Anthropic、OpenAI），不含任何密钥、不自动注册
+  - Provider / Route 的注册、更新、查询、删除
+  - 确定性的 `ResolvedRoute` 解析（只携带 `credentialRef`）
+  - 仅用于测试的内存 `InMemoryCredentialStore`
+- 覆盖契约、Fake Gateway、Agent Core、Provider/Route 与凭据边界的离线测试
 
 当前**还没有**：
 
 - 真实模型调用与网络请求
 - Anthropic Messages / OpenAI-compatible 真实适配器
-- Provider / Route 管理与凭据存储
+- Provider / Route 的持久化（文件、SQLite、OS Keychain）
 - 桌面端（Tauri）与 CLI 功能
 - 会话数据库、工具执行器、审批机制、记忆系统、上下文压缩
 
-所有测试默认离线运行，不依赖外部网络服务。
+所有测试默认离线运行，不依赖外部网络服务。Provider / Route 配置当前只存在于内存中，
+进程结束即丢失；凭据只以 `credential:` 引用形式出现在配置里，秘密值单独由凭据库保存。
 
 ## 目标
 

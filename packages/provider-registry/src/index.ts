@@ -1,0 +1,32 @@
+export type {
+  ProviderDefinition,
+  ProviderProtocol,
+  ResolvedRoute,
+  RouteDefinition,
+} from "./types.js";
+export {
+  CREDENTIAL_REF_PATTERN,
+  PROVIDER_ID_PATTERN,
+  assertCredentialRef,
+  cloneProviderDefinition,
+  cloneRouteDefinition,
+  isValidCredentialRef,
+  validateProviderDefinition,
+  validateRouteDefinition,
+} from "./types.js";
+
+export type { ProviderRegistryErrorCodeKey } from "./errors.js";
+export {
+  PROVIDER_REGISTRY_ERROR_CODES,
+  ProviderRegistryError,
+  providerRegistryError,
+} from "./errors.js";
+
+export type { CredentialRef, CredentialStore } from "./credential-store.js";
+export { InMemoryCredentialStore } from "./credential-store.js";
+
+export type { ProviderPreset } from "./presets.js";
+export { getOfficialProviderPresets } from "./presets.js";
+
+export type { ProviderRegistry } from "./registry.js";
+export { InMemoryProviderRegistry } from "./registry.js";

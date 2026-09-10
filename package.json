@@ -19,6 +19,7 @@
   "devDependencies": {
     "@agent-workbench/agent-core": "workspace:*",
     "@agent-workbench/model-gateway": "workspace:*",
+    "@agent-workbench/provider-registry": "workspace:*",
     "@types/node": "^24.10.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"

@@ -40,6 +40,36 @@ Anthropic Messages   OpenAI-compatible
 - `agent-core/src/contracts.ts` 与 `model-gateway/src/contracts.ts` 仅作为兼容性
   转出层（re-export）保留，真实实现只有 `agent-contracts` 一份。
 
+## Provider / Route 配置核心
+
+Provider 与 Route 配置被抽取到独立包 `@agent-workbench/provider-registry`，它是本项目
+自己的配置核心，不依赖其他 workspace 包，也不依赖任何网络 SDK：
+
+```text
+官方 Provider Presets
+          ↓
+Provider Registry
+          ↓
+Route Registry
+          ↓
+Resolved Route
+          ↓
+后续 Model Gateway Adapter
+```
+
+- **Provider Registry 是独立配置核心**：Provider 与 Route 只在本项目内部注册与解析，
+  CC Switch 不在调用链中。
+- **Route 只引用 Provider 和 model**：`RouteDefinition` 只有 `providerId` 与 `model`，
+  不携带协议、地址、凭据或任何传输层字段。
+- **credentialRef 不等于 secret**：`credentialRef` 形如 `credential:<id>`，只是一个
+  指向秘密值的引用。`ProviderDefinition`、`RouteDefinition`、`ResolvedRoute` 都只允许
+  出现引用，不允许出现秘密值本身。
+- **Task 2 使用内存 Registry**：Provider、Route 与凭据都只存在于进程内存中。
+- **Task 2 不提供持久化**：没有文件配置、没有 SQLite、没有 OS Keychain、没有环境变量。
+- **Task 2 不发起网络请求**：Registry 只做数据校验与解析，不解析 DNS、不建立连接。
+- **Task 2 尚未实现任何真实协议 adapter**：`anthropic_messages` 与 `openai_compatible`
+  目前只是被校验与记录的协议枚举，没有任何出站实现。
+
 ## 核心原则
 
 ### 单一 Agent Core
@@ -60,8 +90,14 @@ Provider 凭据（API Key、Token、Authorization header 等）不得进入：
 - 应用日志
 - Memory / 长期记忆
 - Desktop Renderer
+- ProviderDefinition / RouteDefinition / ResolvedRoute
 
 凭据只允许存在于本地受控的 Provider 配置层，并在 Model Gateway 出站时注入。
+
+配置与凭据的分离方式是引用：`ProviderDefinition.credentialRef` 只保存
+`credential:<id>` 形式的引用，秘密值由独立的凭据库保存，两者永不合并。
+`InMemoryProviderRegistry` 不读取、不输出、不记录秘密值，也不接触凭据库；
+`ResolvedRoute` 只把引用继续传给后续的 Model Gateway adapter。
 
 Agent Core 不原样转发 Model Gateway 的错误文本。Gateway 错误码必须命中受控白名单
 （`aborted`、`rate_limited`、`upstream_unavailable`、`provider_protocol_error`、
@@ -69,6 +105,10 @@ Agent Core 不原样转发 Model Gateway 的错误文本。Gateway 错误码必�
 （`aborted` 为 `Request aborted.`，其余为 `Model gateway request failed.`）。
 因此网关侧的 URL、Authorization、API Key、Token、请求头、Provider 原始响应与异常
 堆栈都不会出现在 Agent 事件流中。
+
+Provider Registry 的错误信息同样只使用固定文案：不回显输入值、URL、字段名或任何
+疑似秘密的内容，调用方必须依据稳定错误码（如 `forbidden_provider_field`、
+`invalid_provider_url`、`invalid_credential_ref`）而不是错误文本做判断。
 
 ### 与 CC Switch 无关
 
@@ -115,7 +155,31 @@ Model Gateway 之下规划两类协议适配：
   二者只依赖 `@agent-workbench/agent-contracts`。
 - **当前仍没有真实模型调用**，也没有 Anthropic / OpenAI-compatible 适配器。
 
+### Task 2（已完成）
+
+已建立完全离线的本地 Provider / Route 配置核心：
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| 类型与校验 | `packages/provider-registry/src/types.ts` | `ProviderDefinition`、`RouteDefinition`、`ResolvedRoute`、协议枚举与全部运行时校验 |
+| 错误契约 | `packages/provider-registry/src/errors.ts` | `ProviderRegistryError` 与稳定错误码表；固定文案，不回显输入 |
+| 凭据库 | `packages/provider-registry/src/credential-store.ts` | 仅测试用的内存 `InMemoryCredentialStore`，按 `credentialRef` 精确存取 |
+| 官方预设 | `packages/provider-registry/src/presets.ts` | Anthropic 与 OpenAI 两个预设；无密钥、无 headers、不自动注册 |
+| 内存注册表 | `packages/provider-registry/src/registry.ts` | Provider/Route 增删改查与 `ResolvedRoute` 解析 |
+
+边界：
+
+- Provider 与 Route 只保存在内存中，进程结束即丢失，**没有任何持久化**。
+- 官方预设只是只读模板，不自动注册、不自动启用、不发起网络请求。
+- 无效配置会被拒绝：非法 ID、重复 ID、非法协议、非法 URL（含 query/hash/userinfo）、
+  非法 `credentialRef`、非法 model，以及任何 `apiKey` / `token` / `authorization` /
+  `headers` / `secret` 等禁止字段。
+- `resolveRoute()` 遇到不存在的 Route、disabled Route、不存在的 Provider、disabled
+  Provider 时分别抛出稳定错误码，**不做自动重试，也不做故障转移**。
+- **当前仍没有真实模型调用**，`anthropic_messages` 与 `openai_compatible` 尚无出站 adapter。
+
 
 ### 后续任务（未实现）
 
-真实 Model Gateway 适配器、Agent Loop 重试、工具执行、审批、会话存储、Desktop/CLI 入口等。
+真实 Model Gateway 适配器、Provider / Route 持久化、凭据持久化、Agent Loop 重试、
+工具执行、审批、会话存储、Desktop/CLI 入口等。
