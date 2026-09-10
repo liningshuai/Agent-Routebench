@@ -3,11 +3,13 @@ import type {
   ModelStreamEvent,
 } from "@agent-workbench/agent-contracts";
 import {
+  assertFiniteJsonValue,
   assertNoCacheTokens,
   isNonNegativeInteger,
   isPlainObject,
   mapStructuredErrorType,
   parseJsonObjectFrame,
+  parseToolInputObject,
   protocolError,
   readTokenCount,
   utf8ByteLength,
@@ -39,6 +41,7 @@ type BlockState =
       readonly id: string;
       readonly name: string;
       readonly initialInput: JsonValue;
+      readonly initialIsEmpty: boolean;
       json: string;
       bytes: number;
     };
@@ -140,15 +143,27 @@ function handleBlockStart(
     }
     state.toolIds.add(id);
 
-    const initialInput = isPlainObject(contentBlock.input)
-      ? (contentBlock.input as JsonValue)
-      : ({} as JsonValue);
+    // The initial input must be present and must be a finite JSON object.
+    // Substituting `{}` for a malformed value would turn an invalid upstream
+    // payload into a different, apparently valid tool call.
+    const rawInput = contentBlock.input;
+    if (rawInput === undefined || !isPlainObject(rawInput)) {
+      throw protocolError();
+    }
+    assertFiniteJsonValue(rawInput);
+
+    // Counted as UTF-8 bytes of its JSON serialisation.
+    const initialBytes = utf8ByteLength(JSON.stringify(rawInput));
+    if (initialBytes > state.maxToolInputBytes) {
+      throw protocolError();
+    }
 
     state.blocks.set(index, {
       kind: "tool_use",
       id,
       name,
-      initialInput,
+      initialInput: rawInput as JsonValue,
+      initialIsEmpty: Object.keys(rawInput).length === 0,
       json: "",
       bytes: 0,
     });
@@ -200,6 +215,11 @@ function handleBlockDelta(
     if (typeof partial !== "string") {
       throw protocolError();
     }
+    if (partial.length > 0 && !block.initialIsEmpty) {
+      // A non-empty initial object combined with streamed fragments is an
+      // ambiguous payload; silently merging or overwriting it is not allowed.
+      throw protocolError();
+    }
     block.bytes += utf8ByteLength(partial);
     if (block.bytes > state.maxToolInputBytes) {
       throw protocolError();
@@ -236,16 +256,7 @@ function handleBlockStop(
   if (accumulated.length === 0) {
     input = block.initialInput;
   } else {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(accumulated);
-    } catch {
-      throw protocolError();
-    }
-    if (!isPlainObject(parsed)) {
-      throw protocolError();
-    }
-    input = parsed as JsonValue;
+    input = parseToolInputObject(accumulated) as JsonValue;
   }
 
   state.pendingToolCalls.push({

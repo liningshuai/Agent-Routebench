@@ -7,6 +7,7 @@ import {
   isPlainObject,
   mapStructuredErrorType,
   parseJsonObjectFrame,
+  parseToolInputObject,
   protocolError,
   readTokenCount,
   utf8ByteLength,
@@ -198,31 +199,37 @@ function emitToolCalls(
 ): void {
   const ordered = [...state.toolCalls.values()].sort((a, b) => a.index - b.index);
 
+  // Validate and build the whole batch first: a duplicate id discovered on the
+  // second call must not leave the first call already emitted.
+  const seenIds = new Set<string>();
+  const batch: { id: string; name: string; input: JsonValue }[] = [];
+
   for (const entry of ordered) {
     if (entry.id === null || entry.name === null) {
       throw protocolError();
     }
+    if (seenIds.has(entry.id)) {
+      throw protocolError();
+    }
+    seenIds.add(entry.id);
+
     const trimmed = entry.args.trim();
     let input: JsonValue;
     if (trimmed.length === 0) {
       input = {} as JsonValue;
     } else {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(trimmed);
-      } catch {
-        throw protocolError();
-      }
-      if (!isPlainObject(parsed)) {
-        throw protocolError();
-      }
-      input = parsed as JsonValue;
+      input = parseToolInputObject(trimmed) as JsonValue;
     }
+
+    batch.push({ id: entry.id, name: entry.name, input });
+  }
+
+  for (const call of batch) {
     events.push({
       type: "tool_call",
-      id: entry.id,
-      name: entry.name,
-      input,
+      id: call.id,
+      name: call.name,
+      input: call.input,
     });
   }
 

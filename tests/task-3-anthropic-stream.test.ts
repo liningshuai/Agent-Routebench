@@ -5,6 +5,8 @@ import {
   anthropicFrame as frame,
   bytes,
   collectEvents,
+  concatBytes,
+  createCountingSource,
   fromChunks,
   splitBytes,
   textOf,
@@ -532,6 +534,267 @@ describe("task 3 anthropic stream — protocol violations", () => {
     expect(events[events.length - 1]).toEqual({ type: "completed" });
     expect(textOf(events)).toBe("ok");
     expect(consumed.length).toBeLessThan(9);
+  });
+});
+
+describe("task 3 anthropic stream — rework: initial tool input validation", () => {
+  function startBlock(
+    inputJson: string | null,
+    index = 0,
+    id = "toolu_1",
+    name = "read_file",
+  ): string {
+    const inputPart = inputJson === null ? "" : `,"input":${inputJson}`;
+    return `event: content_block_start\ndata: {"type":"content_block_start","index":${index},"content_block":{"type":"tool_use","id":"${id}","name":"${name}"${inputPart}}}\n\n`;
+  }
+
+  function streamWith(
+    inputJson: string | null,
+    deltas: readonly string[] = [],
+  ): string {
+    return [
+      messageStart(1, 1),
+      startBlock(inputJson),
+      ...deltas.map((fragment) => jsonDelta(fragment, 0)),
+      blockStop(0),
+      messageDelta("tool_use", 2),
+      messageStop,
+    ].join("");
+  }
+
+  it("rejects a tool_use block whose initial input is not an object", async () => {
+    for (const raw of ["[]", "null", '"{}"', "123", "false", '"text"']) {
+      const events = await decode([streamWith(raw)]);
+      expect(expectSingleError(events), raw).toBe("provider_protocol_error");
+      expect(events.filter((event) => event.type === "tool_call")).toEqual([]);
+    }
+  });
+
+  it("rejects a tool_use block with no input field at all", async () => {
+    const events = await decode([streamWith(null)]);
+    expect(events.filter((event) => event.type === "tool_call")).toEqual([]);
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+
+  it("accepts an empty initial object", async () => {
+    const events = await decode([streamWith("{}")]);
+    expect(events[0]).toEqual({
+      type: "tool_call",
+      id: "toolu_1",
+      name: "read_file",
+      input: {},
+    });
+    expect(events[events.length - 1]).toEqual({ type: "completed" });
+  });
+
+  it("accepts a non empty initial object with no argument deltas", async () => {
+    const events = await decode([streamWith('{"path":"a.txt","n":2}')]);
+    expect(events[0]).toEqual({
+      type: "tool_call",
+      id: "toolu_1",
+      name: "read_file",
+      input: { path: "a.txt", n: 2 },
+    });
+    expect(events[events.length - 1]).toEqual({ type: "completed" });
+  });
+
+  it("still supports an empty initial object plus streamed deltas", async () => {
+    const events = await decode([
+      streamWith("{}", ['{"pa', 'th":"a.txt"}']),
+    ]);
+
+    expect(events[0]).toEqual({
+      type: "tool_call",
+      id: "toolu_1",
+      name: "read_file",
+      input: { path: "a.txt" },
+    });
+    expect(events[events.length - 1]).toEqual({ type: "completed" });
+  });
+
+  it("rejects a non empty initial object combined with argument deltas", async () => {
+    const events = await decode([
+      streamWith('{"path":"a.txt"}', ['{"other":1}']),
+    ]);
+
+    expect(events.filter((event) => event.type === "tool_call")).toEqual([]);
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+
+  it("rejects an initial object larger than the tool input limit", async () => {
+    const oversized = `{"path":"${"a".repeat(64)}"}`;
+
+    const accepted = await decode([streamWith(oversized)]);
+    expect(accepted[0]?.type).toBe("tool_call");
+
+    const rejected = await collectEvents(
+      adapter.decode(fromChunks(stream([streamWith(oversized)])), {
+        maxToolInputBytes: 32,
+      }),
+    );
+    expect(rejected.filter((event) => event.type === "tool_call")).toEqual([]);
+    expect(expectSingleError(rejected)).toBe("provider_protocol_error");
+  });
+
+  it("rejects an initial object containing a non finite number", async () => {
+    const events = await decode([streamWith('{"n":1e400}')]);
+    expect(events.filter((event) => event.type === "tool_call")).toEqual([]);
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+
+  it("rejects streamed arguments that parse to a non finite number", async () => {
+    const events = await decode([streamWith("{}", ['{"n":1e400}'])]);
+    expect(events.filter((event) => event.type === "tool_call")).toEqual([]);
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+
+  it("rejects streamed arguments that exceed the tool input limit", async () => {
+    const events = await collectEvents(
+      adapter.decode(
+        fromChunks(stream([streamWith("{}", [`{"p":"${"a".repeat(64)}"}`])])),
+        { maxToolInputBytes: 32 },
+      ),
+    );
+
+    expect(events.filter((event) => event.type === "tool_call")).toEqual([]);
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+});
+
+describe("task 3 anthropic stream — rework: terminal boundary", () => {
+  const COMPLETE_STREAM = [
+    messageStart(1, 1),
+    textBlock(0),
+    textDelta("ok"),
+    blockStop(0),
+    messageDelta("end_turn", 2),
+    messageStop,
+  ].join("");
+
+  it("keeps the completed response when invalid utf-8 follows message_stop", async () => {
+    const payload = concatBytes([
+      bytes(COMPLETE_STREAM),
+      new Uint8Array([0xff, 0xfe]),
+      bytes("\n\n"),
+    ]);
+
+    const events = await collectEvents(adapter.decode(fromChunks([payload])));
+
+    expect(events).toEqual([
+      { type: "text_delta", text: "ok" },
+      { type: "usage", inputTokens: 1, outputTokens: 2 },
+      { type: "completed" },
+    ]);
+  });
+
+  it("does not parse an oversized trailing frame after message_stop", async () => {
+    const payload = concatBytes([
+      bytes(COMPLETE_STREAM),
+      bytes("data: " + "x".repeat(4096)),
+    ]);
+
+    const events = await collectEvents(adapter.decode(fromChunks([payload])));
+
+    expect(events[events.length - 1]).toEqual({ type: "completed" });
+    expect(events.filter((event) => event.type === "error")).toEqual([]);
+  });
+
+  it("keeps a single safe error when garbage follows an upstream error", async () => {
+    const payload = concatBytes([
+      bytes(
+        `${messageStart(1, 1)}${frame({ type: "error", error: { type: "overloaded_error", message: "boom" } })}`,
+      ),
+      new Uint8Array([0xff, 0xfe]),
+      bytes("\n\n"),
+    ]);
+
+    const events = await collectEvents(adapter.decode(fromChunks([payload])));
+
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe("error");
+    if (events[0].type === "error") {
+      expect(events[0].code).toBe("upstream_unavailable");
+    }
+  });
+
+  it("still reports invalid utf-8 that appears before message_stop", async () => {
+    const payload = concatBytes([
+      bytes(`${messageStart(1, 1)}${textBlock(0)}${textDelta("before")}`),
+      new Uint8Array([0xff, 0xfe]),
+      bytes("\n\n"),
+      bytes(`${blockStop(0)}${messageDelta("end_turn", 2)}${messageStop}`),
+    ]);
+
+    const events = await collectEvents(adapter.decode(fromChunks([payload])));
+
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+
+  it("keeps already emitted text when a malformed frame appears before termination", async () => {
+    const payload = [
+      messageStart(1, 1),
+      textBlock(0),
+      textDelta("first"),
+      textDelta("second"),
+      "data: {broken}\n\n",
+      messageDelta("end_turn", 2),
+      messageStop,
+    ].join("");
+
+    const events = await collectEvents(adapter.decode(fromChunks([bytes(payload)])));
+
+    expect(events.filter((event) => event.type === "text_delta")).toEqual([
+      { type: "text_delta", text: "first" },
+      { type: "text_delta", text: "second" },
+    ]);
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+
+  it("does not read the next source chunk after message_stop", async () => {
+    const source = createCountingSource([
+      bytes(COMPLETE_STREAM),
+      bytes(textDelta("never read")),
+    ]);
+
+    const events = await collectEvents(adapter.decode(source.stream));
+
+    expect(events[events.length - 1]).toEqual({ type: "completed" });
+    expect(source.nextCalls).toBe(1);
+  });
+
+  it("produces identical events whatever the chunking of the same stream", async () => {
+    const payload = [
+      messageStart(7, 1),
+      textBlock(0),
+      textDelta("alpha"),
+      textDelta(" beta"),
+      blockStop(0),
+      messageDelta("end_turn", 9),
+      messageStop,
+    ].join("");
+
+    const whole = await collectEvents(
+      adapter.decode(fromChunks([bytes(payload)])),
+    );
+    const perFrame = await collectEvents(
+      adapter.decode(
+        fromChunks([
+          messageStart(7, 1),
+          textBlock(0),
+          textDelta("alpha"),
+          textDelta(" beta"),
+          blockStop(0),
+          messageDelta("end_turn", 9),
+          messageStop,
+        ].map((frame) => bytes(frame))),
+      ),
+    );
+    const perByte = await collectEvents(
+      adapter.decode(fromChunks(splitBytes(bytes(payload), 1))),
+    );
+
+    expect(perFrame).toEqual(whole);
+    expect(perByte).toEqual(whole);
   });
 });
 

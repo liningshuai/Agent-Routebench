@@ -49,6 +49,57 @@ export function readTokenCount(value: unknown): number | undefined {
   return value;
 }
 
+function isFiniteJsonValue(value: unknown, depth: number): boolean {
+  if (depth > 64) {
+    return false;
+  }
+  if (value === null) {
+    return true;
+  }
+  const kind = typeof value;
+  if (kind === "string" || kind === "boolean") {
+    return true;
+  }
+  if (kind === "number") {
+    return Number.isFinite(value as number);
+  }
+  if (Array.isArray(value)) {
+    return value.every((item) => isFiniteJsonValue(item, depth + 1));
+  }
+  if (isPlainObject(value)) {
+    return Object.values(value).every((item) => isFiniteJsonValue(item, depth + 1));
+  }
+  return false;
+}
+
+/**
+ * Rejects a parsed tool payload that is not a finite JSON value.
+ *
+ * `JSON.parse` happily turns `1e400` into `Infinity`, which is not a JSON value
+ * and would be silently rewritten as `null` when re-serialised. Both protocol
+ * decoders share this check so their behaviour cannot diverge.
+ */
+export function assertFiniteJsonValue(value: unknown): void {
+  if (!isFiniteJsonValue(value, 0)) {
+    throw protocolError();
+  }
+}
+
+/** Parses a tool payload that must be a JSON object of finite JSON values. */
+export function parseToolInputObject(raw: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw protocolError();
+  }
+  if (!isPlainObject(parsed)) {
+    throw protocolError();
+  }
+  assertFiniteJsonValue(parsed);
+  return parsed;
+}
+
 /**
  * This stage does not enable prompt caching. A non-zero cache count is outside
  * the supported subset, and silently dropping it would report a misleading

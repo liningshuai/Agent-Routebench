@@ -135,14 +135,28 @@ function releaseIterator(iterator: AsyncIterator<Uint8Array>): void {
  * - at most one terminal event (`completed` or `error`) per call,
  * - consumption stops at the first terminal event and the upstream iterator is
  *   released,
- * - aborting yields one `aborted` event without waiting for another chunk.
+ * - aborting is honoured at every step: before reading a chunk, *before pulling
+ *   the next frame out of the current chunk*, and before every event is emitted,
+ *   so a cancel that lands mid-chunk stops the remaining frames instead of
+ *   leaking more events or parsing trailing bytes,
+ * - aborting yields exactly one `aborted` event and never a `text_delta`,
+ *   `tool_call`, `usage` or `completed` afterwards,
+ * - a terminal event that already reached the consumer is never followed by an
+ *   `aborted`,
+ * - aborting resolves a pending `next()` without waiting for another chunk.
+ *
+ * Frames are consumed lazily through an explicitly driven iterator, so the
+ * cancellation check happens before a frame is produced and the rest of the
+ * chunk is neither parsed nor validated once the consumer has cancelled.
  */
 export async function* decodeFrameStream<TState>(
   source: AsyncIterable<Uint8Array>,
   options: NormalizedDecodeOptions,
   decoder: FrameDecoder<TState>,
 ): AsyncIterable<ModelStreamEvent> {
-  if (options.signal?.aborted) {
+  const signal = options.signal;
+
+  if (signal?.aborted) {
     yield streamErrorEvent("aborted");
     return;
   }
@@ -151,9 +165,16 @@ export async function* decodeFrameStream<TState>(
   const parser = new SseFrameParser({ maxFrameBytes: options.maxFrameBytes });
   const state = decoder.createState(options);
 
+  const cancelled = (): boolean => signal?.aborted === true;
+
   try {
     for (;;) {
-      const step = await nextStep(iterator, options.signal);
+      if (cancelled()) {
+        yield streamErrorEvent("aborted");
+        return;
+      }
+
+      const step = await nextStep(iterator, signal);
       if (step.kind === "aborted") {
         yield streamErrorEvent("aborted");
         return;
@@ -162,20 +183,64 @@ export async function* decodeFrameStream<TState>(
         break;
       }
 
-      for (const frame of parser.push(step.value)) {
-        for (const event of decoder.handleFrame(state, frame)) {
-          yield event;
+      const frames = parser.framesFrom(step.value);
+      try {
+        for (;;) {
+          // Checked *before* the frame iterator advances, so a cancel that
+          // arrived while the consumer processed the previous event never
+          // triggers another frame parse (which may itself be malformed).
+          if (cancelled()) {
+            yield streamErrorEvent("aborted");
+            return;
+          }
+
+          const nextFrame = frames.next();
+          if (nextFrame.done === true) {
+            break;
+          }
+
+          // Every event of one frame is emitted as a batch; the terminal check
+          // happens only after the batch, so a final frame that carries both
+          // usage and completed is not truncated.
+          for (const event of decoder.handleFrame(state, nextFrame.value)) {
+            // Re-checked after every resume: a cancel that arrives while the
+            // consumer processes the previous event must suppress this one.
+            if (cancelled()) {
+              yield streamErrorEvent("aborted");
+              return;
+            }
+            yield event;
+          }
+
+          if (decoder.isTerminal(state)) {
+            return;
+          }
         }
-        if (decoder.isTerminal(state)) {
-          return;
-        }
+      } finally {
+        // Abandoning the frame iterator drops the unparsed tail of the chunk.
+        frames.return(undefined);
       }
     }
 
+    if (cancelled()) {
+      yield streamErrorEvent("aborted");
+      return;
+    }
+
     for (const frame of parser.finish()) {
+      if (cancelled()) {
+        yield streamErrorEvent("aborted");
+        return;
+      }
+
       for (const event of decoder.handleFrame(state, frame)) {
+        if (cancelled()) {
+          yield streamErrorEvent("aborted");
+          return;
+        }
         yield event;
       }
+
       if (decoder.isTerminal(state)) {
         return;
       }
@@ -183,6 +248,10 @@ export async function* decodeFrameStream<TState>(
 
     if (!decoder.isTerminal(state)) {
       for (const event of decoder.finish(state)) {
+        if (cancelled()) {
+          yield streamErrorEvent("aborted");
+          return;
+        }
         yield event;
       }
     }

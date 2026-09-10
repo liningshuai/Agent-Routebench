@@ -5,6 +5,8 @@ import {
   SSE_DONE,
   bytes,
   collectEvents,
+  concatBytes,
+  createCountingSource,
   dataFrame,
   fromChunks,
   splitBytes,
@@ -437,6 +439,264 @@ describe("task 3 openai chat stream — protocol violations", () => {
     expect(events[events.length - 1]).toEqual({ type: "completed" });
     expect(textOf(events)).toBe("ok");
     expect(consumed.length).toBeLessThan(4);
+  });
+});
+
+describe("task 3 openai chat stream — rework: tool call id uniqueness", () => {
+  function twoCallsInOneFrame(
+    firstId: string,
+    secondId: string,
+  ): string {
+    return dataFrame({
+      choices: [
+        {
+          index: 0,
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: firstId,
+                type: "function",
+                function: { name: "a", arguments: "{}" },
+              },
+              {
+                index: 1,
+                id: secondId,
+                type: "function",
+                function: { name: "b", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    });
+  }
+
+  it("rejects the same id used by two indexes in one frame", async () => {
+    const events = await decode([
+      twoCallsInOneFrame("same", "same"),
+      choiceChunk({}, "tool_calls"),
+      SSE_DONE,
+    ]);
+
+    expect(events.filter((event) => event.type === "tool_call")).toEqual([]);
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+
+  it("rejects the same id used by two indexes across frames", async () => {
+    const events = await decode([
+      toolCallDelta(0, { id: "dup", type: "function", name: "a" }),
+      toolCallDelta(1, { id: "dup", type: "function", name: "b" }),
+      choiceChunk({}, "tool_calls"),
+      SSE_DONE,
+    ]);
+
+    expect(events.filter((event) => event.type === "tool_call")).toEqual([]);
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+
+  it("detects the duplicate even when index 1 arrives before index 0", async () => {
+    const events = await decode([
+      toolCallDelta(1, { id: "dup", type: "function", name: "b" }),
+      toolCallDelta(0, { id: "dup", type: "function", name: "a" }),
+      choiceChunk({}, "tool_calls"),
+      SSE_DONE,
+    ]);
+
+    expect(events.filter((event) => event.type === "tool_call")).toEqual([]);
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+
+  it("accepts the same id re-declared for the same index", async () => {
+    const events = await decode([
+      toolCallDelta(0, { id: "ok", type: "function", name: "a" }),
+      toolCallDelta(0, { id: "ok" }),
+      toolCallDelta(0, { arguments: "{}" }),
+      choiceChunk({}, "tool_calls"),
+      SSE_DONE,
+    ]);
+
+    expect(events).toEqual([
+      { type: "tool_call", id: "ok", name: "a", input: {} },
+      { type: "completed" },
+    ]);
+  });
+
+  it("rejects a conflicting id for the same index", async () => {
+    const events = await decode([
+      toolCallDelta(0, { id: "one", type: "function", name: "a" }),
+      toolCallDelta(0, { id: "two" }),
+      choiceChunk({}, "tool_calls"),
+      SSE_DONE,
+    ]);
+
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+
+  it("does not emit a first call before discovering the duplicate", async () => {
+    const events = await decode([
+      toolCallDelta(0, { id: "same", type: "function", name: "a" }),
+      toolCallDelta(0, { arguments: "{}" }),
+      toolCallDelta(1, { id: "same", type: "function", name: "b" }),
+      toolCallDelta(1, { arguments: "{}" }),
+      choiceChunk({}, "tool_calls"),
+      SSE_DONE,
+    ]);
+
+    expect(events.filter((event) => event.type === "tool_call")).toEqual([]);
+    expect(events.filter((event) => event.type === "completed")).toEqual([]);
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+
+  it("never rewrites the upstream tool id to make it unique", async () => {
+    const events = await decode([
+      toolCallDelta(0, { id: "same", type: "function", name: "a" }),
+      toolCallDelta(1, { id: "same", type: "function", name: "b" }),
+      choiceChunk({}, "tool_calls"),
+      SSE_DONE,
+    ]);
+
+    expect(JSON.stringify(events)).not.toContain("same-2");
+    expect(events.some((event) => event.type === "tool_call")).toBe(false);
+  });
+});
+
+describe("task 3 openai chat stream — rework: finite json and terminal boundary", () => {
+  it("rejects tool arguments that parse to a non finite number", async () => {
+    const events = await decode([
+      toolCallDelta(0, { id: "call_inf", type: "function", name: "alpha" }),
+      toolCallDelta(0, { arguments: '{"n": 1e400}' }),
+      choiceChunk({}, "tool_calls"),
+      SSE_DONE,
+    ]);
+
+    expect(events.filter((event) => event.type === "tool_call")).toEqual([]);
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+
+  it("keeps the completed response when invalid utf-8 follows the done sentinel", async () => {
+    const payload = concatBytes([
+      bytes(
+        choiceChunk({ content: "ok" }) +
+          choiceChunk({}, "stop") +
+          SSE_DONE,
+      ),
+      new Uint8Array([0xff, 0xfe]),
+      bytes("\n\n"),
+    ]);
+
+    const events = await collectEvents(adapter.decode(fromChunks([payload])));
+
+    expect(events).toEqual([
+      { type: "text_delta", text: "ok" },
+      { type: "completed" },
+    ]);
+  });
+
+  it("does not parse an oversized trailing frame after completion", async () => {
+    const payload = concatBytes([
+      bytes(choiceChunk({ content: "ok" }) + choiceChunk({}, "stop") + SSE_DONE),
+      bytes("data: " + "x".repeat(4096)),
+    ]);
+
+    const events = await collectEvents(adapter.decode(fromChunks([payload])));
+
+    expect(events[events.length - 1]).toEqual({ type: "completed" });
+    expect(events.filter((event) => event.type === "error")).toEqual([]);
+  });
+
+  it("keeps a single safe error when garbage follows an upstream error", async () => {
+    const payload = concatBytes([
+      bytes(
+        dataFrame({
+          error: { message: "boom", type: "unexpected_error" },
+        }),
+      ),
+      new Uint8Array([0xff, 0xfe]),
+      bytes("\n\n"),
+    ]);
+
+    const events = await collectEvents(adapter.decode(fromChunks([payload])));
+
+    expect(events).toEqual([
+      {
+        type: "error",
+        code: "gateway_error",
+        message: "Model gateway request failed.",
+        retryable: false,
+      },
+    ]);
+  });
+
+  it("still reports invalid utf-8 that appears before the terminal event", async () => {
+    const payload = concatBytes([
+      bytes(choiceChunk({ content: "before" })),
+      new Uint8Array([0xff, 0xfe]),
+      bytes("\n\n"),
+      bytes(choiceChunk({}, "stop") + SSE_DONE),
+    ]);
+
+    const events = await collectEvents(adapter.decode(fromChunks([payload])));
+
+    expect(events.filter((event) => event.type === "error")).toHaveLength(1);
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+
+  it("keeps already emitted text when a malformed frame appears before termination", async () => {
+    const payload =
+      choiceChunk({ content: "first" }) +
+      choiceChunk({ content: "second" }) +
+      "data: {broken}\n\n" +
+      choiceChunk({}, "stop") +
+      SSE_DONE;
+
+    const events = await collectEvents(adapter.decode(fromChunks([bytes(payload)])));
+
+    expect(events.filter((event) => event.type === "text_delta")).toEqual([
+      { type: "text_delta", text: "first" },
+      { type: "text_delta", text: "second" },
+    ]);
+    expect(expectSingleError(events)).toBe("provider_protocol_error");
+  });
+
+  it("does not read the next source chunk after completion", async () => {
+    const source = createCountingSource([
+      bytes(choiceChunk({ content: "ok" }) + choiceChunk({}, "stop") + SSE_DONE),
+      bytes(choiceChunk({ content: "never read" })),
+    ]);
+
+    const events = await collectEvents(adapter.decode(source.stream));
+
+    expect(events[events.length - 1]).toEqual({ type: "completed" });
+    expect(textOf(events)).toBe("ok");
+    expect(source.nextCalls).toBe(1);
+  });
+
+  it("produces identical events whatever the chunking of the same stream", async () => {
+    const frames = [
+      choiceChunk({ role: "assistant", content: "" }),
+      choiceChunk({ content: "alpha" }),
+      choiceChunk({ content: " beta" }),
+      choiceChunk({}, "stop"),
+      usageChunk(7, 9),
+      SSE_DONE,
+    ];
+    const payload = frames.join("");
+
+    const whole = await collectEvents(
+      adapter.decode(fromChunks([bytes(payload)])),
+    );
+    const perFrame = await collectEvents(
+      adapter.decode(fromChunks(frames.map((frame) => bytes(frame)))),
+    );
+    const perByte = await collectEvents(
+      adapter.decode(fromChunks(splitBytes(bytes(payload), 1))),
+    );
+
+    expect(whole[whole.length - 1]).toEqual({ type: "completed" });
+    expect(perFrame).toEqual(whole);
+    expect(perByte).toEqual(whole);
   });
 });
 
