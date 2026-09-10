@@ -1,0 +1,12 @@
+Agent Workbench
+Copyright 2026 Agent Workbench contributors
+
+This product is an independent project.
+
+- The target license for project-owned code is Apache License 2.0.
+- This repository does not copy source code from CC Switch.
+- This repository does not copy source code from Claude Code.
+- This project does not claim protocol compatibility with Claude Code,
+  Codex, ZCode, or CC Switch private protocols.
+- Third-party dependency license inventory will be established before
+  any public release.

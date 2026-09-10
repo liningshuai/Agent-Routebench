@@ -1,0 +1,15 @@
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+.turbo/
+.vite/
+*.log
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+target/
+src-tauri/target/
