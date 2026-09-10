@@ -4,12 +4,12 @@
 
 ## 当前阶段
 
-**Task 9：Local Agent API v1**（loopback HTTP 控制面）。在既有能力之上新增：
+**Task 10：Provider 健康检查与模型目录发现**。在既有能力之上新增：
 
-- `@agent-workbench/local-agent-api`：本机回环 HTTP API
-- Session 创建 / 查询 / 运行 / 取消；注入式 `LocalAgentRunner`
-- NDJSON 增量事件流；Session 内单并发；不同 Session 隔离
-- 固定安全错误；不读凭据、不调 Provider、不持久化 Session
+- `@agent-workbench/provider-discovery`：受控健康检查 + 模型目录查询
+- Anthropic `/v1/models` 与 OpenAI-compatible `/models`
+- 注入式 HttpClient；只读 Registry 与 CredentialStore
+- 无真实 Provider 调用、无缓存、无重试
 
 此前已有：
 

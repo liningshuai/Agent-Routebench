@@ -448,7 +448,32 @@ Agent Core / Runtime (future)
 - 详见 [Local Agent API](local-agent-api.md)。
 
 
+### Task 10（已完成）
+
+新增 `@agent-workbench/provider-discovery`：Provider 健康检查与模型目录发现。
+
+```text
+ProviderRegistry + CredentialStore
+        ↓
+createProviderDiscovery({ registry, credentialStore, httpClient })
+        ↓
+注入式 DiscoveryHttpClient（GET）
+        ↓
+Anthropic /v1/models  或  OpenAI-compatible /models
+```
+
+边界：
+
+- 只读配置与凭据；不修改 Provider / Route / CredentialStore / 持久化文件。
+- `CredentialStore.get()` 每次调用最多一次；从不 `set`/`delete`。
+- secret 仅临时用于出站请求头，不进入返回值、错误消息或 URL。
+- 注入式 HttpClient；源码无 `fetch(`、`node:http`、`process.env`。
+- 无重试、无故障转移、无缓存；非 2xx 不读取响应体。
+- 依赖方向：`provider-discovery → provider-registry + model-gateway`。
+- 详见 [Provider Discovery](provider-discovery.md)。
+
+
 ### 后续任务（未实现）
 
-探活与模型列表请求、CredentialStore / OS Keychain 持久化、审批 UI 与自动批准策略、
+CredentialStore / OS Keychain 持久化、审批 UI 与自动批准策略、
 CLI、Desktop/Tauri 入口、会话持久化、Memory、上下文压缩等。

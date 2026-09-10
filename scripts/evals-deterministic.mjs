@@ -43,6 +43,8 @@ const required = [
   "docs/verification/task-8-report.md",
   "docs/local-agent-api.md",
   "docs/verification/task-9-report.md",
+  "docs/provider-discovery.md",
+  "docs/verification/task-10-report.md",
   "scripts/verify-layout.mjs",
   "packages/agent-contracts/package.json",
   "packages/agent-contracts/src/contracts.ts",
@@ -102,6 +104,13 @@ const required = [
   "packages/local-agent-api/src/ndjson.ts",
   "packages/local-agent-api/src/server.ts",
   "packages/local-agent-api/src/index.ts",
+  "packages/provider-discovery/package.json",
+  "packages/provider-discovery/tsconfig.json",
+  "packages/provider-discovery/src/types.ts",
+  "packages/provider-discovery/src/errors.ts",
+  "packages/provider-discovery/src/parse.ts",
+  "packages/provider-discovery/src/discovery.ts",
+  "packages/provider-discovery/src/index.ts",
   "tests/helpers/adapter-fixtures.ts",
   "tests/helpers/http-fixtures.ts",
   "tests/helpers/runtime-fixtures.ts",
@@ -137,6 +146,11 @@ const required = [
   "tests/task-9-local-api-streaming.test.ts",
   "tests/task-9-local-api-security.test.ts",
   "tests/task-9-local-api-concurrency.test.ts",
+  "tests/helpers/provider-discovery-fixtures.ts",
+  "tests/task-10-provider-discovery.test.ts",
+  "tests/task-10-provider-discovery-security.test.ts",
+  "tests/task-10-provider-discovery-cancellation.test.ts",
+  "tests/task-10-provider-discovery-protocol.test.ts",
 ];
 
 for (const path of required) {
@@ -218,6 +232,13 @@ runScenario("task 9 local agent API", [
   "tests/task-9-local-api-concurrency.test.ts",
 ]);
 
+runScenario("task 10 provider discovery", [
+  "tests/task-10-provider-discovery.test.ts",
+  "tests/task-10-provider-discovery-protocol.test.ts",
+  "tests/task-10-provider-discovery-security.test.ts",
+  "tests/task-10-provider-discovery-cancellation.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -255,5 +276,10 @@ console.log(
     "LocalAgentRunner, NDJSON incremental event streaming, per-session cancellation and",
     "fixed safe errors. The scenarios bind only 127.0.0.1, never call a real provider,",
     "never read a CredentialStore and never persist a session to disk.",
+    "Task 10 adds offline provider health checks and model catalog discovery: Anthropic",
+    "/v1/models and OpenAI-compatible /models are exercised only through an injected fake",
+    "HttpClient. Credentials are read at most once per call and never written; the",
+    "registry is never mutated; no real provider is contacted; no cache, retry or",
+    "failover is performed.",
   ].join(" "),
 );

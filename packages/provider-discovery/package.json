@@ -1,0 +1,15 @@
+{
+  "name": "@agent-workbench/provider-discovery",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Provider health check and offline model catalog discovery",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@agent-workbench/model-gateway": "workspace:*",
+    "@agent-workbench/provider-registry": "workspace:*"
+  }
+}

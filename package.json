@@ -23,6 +23,7 @@
     "@agent-workbench/local-agent-api": "workspace:*",
     "@agent-workbench/local-persistence": "workspace:*",
     "@agent-workbench/model-gateway": "workspace:*",
+    "@agent-workbench/provider-discovery": "workspace:*",
     "@agent-workbench/provider-registry": "workspace:*",
     "@types/node": "^24.10.1",
     "typescript": "^5.9.3",
