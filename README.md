@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-**Task 4：Routed HTTP Model Gateway 与凭据注入边界**（Task 3 之上）。仓库目前包含：
+**Task 5：有界重试、有序 Provider 故障转移与候选解析**（Task 4 之上）。仓库目前包含：
 
 - pnpm workspace 与 TypeScript 基础配置
 - Vitest 测试入口
@@ -29,11 +29,18 @@
 - **可注入 HTTP transport（`packages/model-gateway/src/http-transport.ts`）**
   - `HttpClient` 是可注入的函数边界；生产默认实现基于 Node 24 原生 `fetch`
   - 所有自动化测试注入 fake client，**不访问任何真实供应商**
+- **`ResilientRoutedHttpModelGateway`（Task 5）**
+  - Route 可配置**有序 fallback Provider 候选**（`fallbackProviderIds`，上限 4）
+  - 同一 Provider 内**有界重试**（默认 2 次，总计上限 8 次）
+  - Provider 之间**有序故障转移**，从不并行请求
+  - 确定性指数退避（`min(initial × 2^n, max)`，无 jitter），`wait` 可注入、可取消
+  - 一旦该 attempt 已输出 `text_delta` / `tool_call` / `usage` / `completed`，
+    **不再重试也不再切换**，避免重复输出
+  - `createRoutedHttpModelGateway()`（Task 4）行为不变：仍是单 Route、单 Provider、单次 HTTP
 
 当前**还没有**：
 
 - 真实供应商端到端验证（没有任何真实模型调用被验证过）
-- 重试、故障转移、多 Provider fallback、Provider 轮换
 - 探活请求与模型列表请求
 - 多轮 Agent Loop、工具执行、审批
 - Provider / Route / 凭据的持久化（文件、SQLite、OS Keychain）
@@ -81,6 +88,8 @@ pnpm evals:deterministic
 - [架构说明](docs/architecture.md)
 - [协议适配器说明](docs/protocol-adapters.md)
 - [HTTP 传输与凭据边界](docs/http-transport.md)
+- [重试、故障转移与 Provider 候选](docs/resilience.md)
+- [Task 5 执行报告](docs/verification/task-5-report.md)
 - [Task 4 执行报告](docs/verification/task-4-report.md)
 - [Task 3 执行报告](docs/verification/task-3-report.md)
 - [许可证边界](docs/licensing.md)

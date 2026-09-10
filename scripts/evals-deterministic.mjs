@@ -33,6 +33,8 @@ const required = [
   "docs/verification/task-3-rework-report.md",
   "docs/verification/task-3-final-fix-report.md",
   "docs/verification/task-4-report.md",
+  "docs/resilience.md",
+  "docs/verification/task-5-report.md",
   "scripts/verify-layout.mjs",
   "packages/agent-contracts/package.json",
   "packages/agent-contracts/src/contracts.ts",
@@ -46,7 +48,10 @@ const required = [
   "packages/model-gateway/src/contracts.ts",
   "packages/model-gateway/src/fake-gateway.ts",
   "packages/model-gateway/src/http-transport.ts",
+  "packages/model-gateway/src/candidate-attempt.ts",
   "packages/model-gateway/src/routed-http-gateway.ts",
+  "packages/model-gateway/src/resilience.ts",
+  "packages/model-gateway/src/resilient-routed-gateway.ts",
   "packages/model-gateway/src/index.ts",
   "packages/model-gateway/src/adapters/index.ts",
   "packages/model-gateway/src/adapters/types.ts",
@@ -82,6 +87,9 @@ const required = [
   "tests/task-4-http-gateway.test.ts",
   "tests/task-4-http-security.test.ts",
   "tests/task-4-http-integration.test.ts",
+  "tests/task-5-provider-candidates.test.ts",
+  "tests/task-5-resilience.test.ts",
+  "tests/task-5-resilience-security.test.ts",
 ];
 
 for (const path of required) {
@@ -131,6 +139,12 @@ runScenario("task 4 routed HTTP transport", [
   "tests/task-4-http-integration.test.ts",
 ]);
 
+runScenario("task 5 retry and failover", [
+  "tests/task-5-provider-candidates.test.ts",
+  "tests/task-5-resilience.test.ts",
+  "tests/task-5-resilience-security.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -141,6 +155,9 @@ console.log(
     "The routed transport is always exercised with an injected fake HTTP client, which",
     "verifies route resolution, the credential reference boundary, request construction,",
     "HTTP status mapping and incremental offline streaming.",
+    "Task 5 adds ordered provider candidates, a bounded retry and an ordered failover,",
+    "verified offline through the same injected fake client and an injected wait;",
+    "a retry or a switch is refused once an attempt has produced visible output.",
     "No real provider calls. No real network access. Authentication headers are exercised",
     "only by the injected fake HTTP client; nothing is sent to a real provider.",
     "No persisted credentials.",

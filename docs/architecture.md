@@ -189,8 +189,11 @@ Task 4 在 codec **之上**新增了 Routed HTTP Gateway 与可注入 HTTP trans
   非法 `credentialRef`、非法 model，以及任何 `apiKey` / `token` / `authorization` /
   `headers` / `secret` 等禁止字段。
 - `resolveRoute()` 遇到不存在的 Route、disabled Route、不存在的 Provider、disabled
-  Provider 时分别抛出稳定错误码，**不做自动重试，也不做故障转移**。
-- **当前仍没有真实模型调用**，`anthropic_messages` 与 `openai_compatible` 尚无出站 adapter。
+  Provider 时分别抛出稳定错误码。注册表本身仍是**纯数据边界**，不做网络 I/O，也不
+  自己重试或切换；有序候选（`fallbackProviderIds`）与 `resolveRouteCandidates()` 只
+  提供数据，真正的重试与故障转移在 Task 5 的网关层完成。
+- **当前仍没有真实模型调用**，Task 5 之前 `anthropic_messages` 与 `openai_compatible`
+  尚无出站 adapter（Task 4 起由 Routed HTTP Gateway 提供）。
 
 ### Task 3（已完成）
 
@@ -265,7 +268,39 @@ ModelRequest
   端到端验证，也没有验证过真实 API key 或真实供应商错误。
 
 
+### Task 5（已完成）
+
+已在同一 `@agent-workbench/model-gateway` 内实现有界重试与有序 Provider 故障转移，
+并在 `@agent-workbench/provider-registry` 内实现 Route 的有序候选配置。
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| Route fallback 配置 | `packages/provider-registry/src/types.ts` | `RouteDefinition.fallbackProviderIds?`、`MAX_ROUTE_FALLBACKS`、fallback 校验与深拷贝 |
+| 候选解析 | `packages/provider-registry/src/registry.ts` | `resolveRouteCandidates()`：主 Provider + 有序 fallback，跳过 disabled；删除/更新时保护被引用的 Provider |
+| 单次尝试运行器 | `packages/model-gateway/src/candidate-attempt.ts` | 单个候选的一次尝试：读凭据、编码、固定 URL/头、单次 HTTP、增量解码、取消（Task 4 与 Task 5 共用） |
+| 重试策略 | `packages/model-gateway/src/resilience.ts` | `RetryPolicy`、确定性退避、retryable/visible 判定、可注入 `wait` |
+| 弹性网关 | `packages/model-gateway/src/resilient-routed-gateway.ts` | `ResilientRoutedHttpModelGateway`：有界重试 + 有序故障转移 + 已输出守卫 |
+
+边界：
+
+- `createRoutedHttpModelGateway()` 的行为**未改变**：仍是单 Route、单 Provider、单次 HTTP。
+  重试与故障转移只由 `ResilientRoutedHttpModelGateway` 提供。
+- attempt 顺序固定且串行：`primary → fallback 1 → fallback 2 …`，每 Provider 最多
+  `maxAttemptsPerProvider` 次，全部合计最多 `maxTotalAttempts` 次；不并行、不回退到已耗尽的候选。
+- 只对受控的 retryable 错误（`rate_limited` / `upstream_unavailable` 且
+  `retryable === true`）重试或切换；`aborted`、`provider_protocol_error`、
+  `gateway_error` 与任何 `retryable === false` 一律直接输出。
+- 一旦该 attempt 已输出 `text_delta` / `tool_call` / `usage` / `completed`，
+  **不再重试也不再切换**，因此不会重复文本、工具调用或 usage 计数。
+- 退避完全确定性、无 jitter；`wait` 可注入，并在 `AbortSignal` 触发时立即结束。
+- 候选只携带 `credentialRef`；secret 只在单次请求的认证头中存在。
+- 依赖未变：`provider-registry` 仍零运行时依赖；`model-gateway` 仍只依赖
+  `agent-contracts` + `provider-registry`。详见 [重试与故障转移](resilience.md)。
+
+- **仍未连接任何真实供应商**：没有验证过真实限流、真实供应商错误或真实 API key。
+
+
 ### 后续任务（未实现）
 
-重试与故障转移、Provider 轮换、探活与模型列表请求、Provider / Route / 凭据持久化、
-Agent Loop、工具执行、审批、会话存储、Desktop/CLI 入口等。
+探活与模型列表请求、Provider / Route / 凭据持久化、Agent Loop、工具执行、审批、
+会话存储、Desktop/CLI 入口等。

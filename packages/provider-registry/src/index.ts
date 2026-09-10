@@ -6,6 +6,7 @@ export type {
 } from "./types.js";
 export {
   CREDENTIAL_REF_PATTERN,
+  MAX_ROUTE_FALLBACKS,
   PROVIDER_ID_PATTERN,
   assertCredentialRef,
   cloneProviderDefinition,

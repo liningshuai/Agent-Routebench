@@ -18,13 +18,20 @@ export interface ProviderDefinition {
   readonly enabled: boolean;
 }
 
-/** A route only references a provider id and one of its model names. */
+/**
+ * A route only references a provider id and one of its model names.
+ *
+ * `fallbackProviderIds` is an ordered, non-sensitive candidate list: it holds
+ * provider ids only, never a URL, a header or a credential. The primary provider
+ * is always tried first, then the fallbacks in the order given here.
+ */
 export interface RouteDefinition {
   readonly id: string;
   readonly name: string;
   readonly providerId: string;
   readonly model: string;
   readonly enabled: boolean;
+  readonly fallbackProviderIds?: readonly string[];
 }
 
 /** Resolved route handed to a future gateway adapter. Still secret free. */
@@ -103,6 +110,14 @@ const SECRET_LIKE_MODEL_PATTERNS: readonly RegExp[] = [
   /^bearer\s+\S+$/i,
   /^(api[_-]?key|authorization|token|secret|password)$/i,
 ];
+
+/**
+ * A fallback list is an ordered candidate list, so its size is bounded.
+ *
+ * The primary provider is always tried first and therefore must not be repeated
+ * inside this list.
+ */
+export const MAX_ROUTE_FALLBACKS = 4;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -256,6 +271,43 @@ export function validateProviderDefinition(input: unknown): ProviderDefinition {
   };
 }
 
+/**
+ * Validates the ordered fallback candidate list.
+ *
+ * Every entry must be a well formed provider id, must not look like a secret and
+ * must be unique, both among the fallbacks and against the primary provider.
+ */
+function assertFallbackProviderIds(
+  value: unknown,
+  primaryProviderId: string,
+): string[] {
+  if (!Array.isArray(value)) {
+    fail("invalidFallbackProviderIds");
+  }
+  if (value.length > MAX_ROUTE_FALLBACKS) {
+    fail("tooManyFallbackProviders");
+  }
+
+  const seen = new Set<string>([primaryProviderId]);
+  const out: string[] = [];
+
+  for (const entry of value) {
+    if (typeof entry !== "string" || !PROVIDER_ID_PATTERN.test(entry)) {
+      fail("invalidFallbackProviderIds");
+    }
+    if (SECRET_LIKE_MODEL_PATTERNS.some((pattern) => pattern.test(entry))) {
+      fail("invalidFallbackProviderIds");
+    }
+    if (seen.has(entry)) {
+      fail("duplicateFallbackProviderId");
+    }
+    seen.add(entry);
+    out.push(entry);
+  }
+
+  return out;
+}
+
 /** Fully validates a route definition and returns a normalized copy. */
 export function validateRouteDefinition(input: unknown): RouteDefinition {
   if (!isPlainObject(input)) {
@@ -281,12 +333,21 @@ export function validateRouteDefinition(input: unknown): RouteDefinition {
   assertModelName(model, "invalidRouteModel");
   assertEnabled(enabled, "invalidRouteEnabled");
 
+  const rawFallbacks = input.fallbackProviderIds;
+  const fallbackProviderIds =
+    rawFallbacks === undefined
+      ? undefined
+      : assertFallbackProviderIds(rawFallbacks, providerId);
+
   return {
     id,
     name,
     providerId,
     model,
     enabled,
+    // Kept absent when the caller never configured fallbacks, so that a stored
+    // route round-trips to exactly the shape it was created from.
+    ...(fallbackProviderIds === undefined ? {} : { fallbackProviderIds }),
   };
 }
 
@@ -305,11 +366,15 @@ export function cloneProviderDefinition(
 }
 
 export function cloneRouteDefinition(route: RouteDefinition): RouteDefinition {
+  const fallbackProviderIds = route.fallbackProviderIds;
   return {
     id: route.id,
     name: route.name,
     providerId: route.providerId,
     model: route.model,
     enabled: route.enabled,
+    ...(fallbackProviderIds === undefined
+      ? {}
+      : { fallbackProviderIds: [...fallbackProviderIds] }),
   };
 }

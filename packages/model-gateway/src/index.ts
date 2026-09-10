@@ -70,3 +70,22 @@ export {
   RoutedHttpModelGateway,
   createRoutedHttpModelGateway,
 } from "./routed-http-gateway.js";
+
+export type { RetryPolicy, RetryWait } from "./resilience.js";
+export {
+  DEFAULT_RETRY_POLICY,
+  RESILIENCE_ERROR_CODES,
+  RETRYABLE_STREAM_ERROR_CODES,
+  ResilienceOptionError,
+  computeBackoffDelayMs,
+  defaultRetryWait,
+  isRetryableStreamError,
+  isVisibleStreamEvent,
+  normalizeRetryPolicy,
+} from "./resilience.js";
+
+export type { ResilientRoutedHttpModelGatewayOptions } from "./resilient-routed-gateway.js";
+export {
+  ResilientRoutedHttpModelGateway,
+  createResilientRoutedHttpModelGateway,
+} from "./resilient-routed-gateway.js";

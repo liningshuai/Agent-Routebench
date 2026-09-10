@@ -28,6 +28,12 @@ export const PROVIDER_REGISTRY_ERROR_CODES = Object.freeze({
   invalidRouteEnabled: "invalid_route_enabled",
   forbiddenRouteField: "forbidden_route_field",
 
+  invalidFallbackProviderIds: "invalid_fallback_provider_ids",
+  duplicateFallbackProviderId: "duplicate_fallback_provider_id",
+  fallbackProviderNotFound: "fallback_provider_not_found",
+  fallbackModelNotAvailable: "fallback_model_not_available",
+  tooManyFallbackProviders: "too_many_fallback_providers",
+
   providerHasRoutes: "provider_has_routes",
   modelNotAvailable: "model_not_available",
   invalidRegistrySnapshot: "invalid_registry_snapshot",
@@ -71,6 +77,16 @@ const ERROR_MESSAGES = Object.freeze({
   invalidRouteEnabled: "Route enabled must be a boolean.",
   forbiddenRouteField:
     "Route definition contains a field that is not allowed in user supplied configuration.",
+
+  invalidFallbackProviderIds:
+    "Route fallbackProviderIds must be an ordered list of provider ids.",
+  duplicateFallbackProviderId:
+    "Route fallbackProviderIds must not repeat a provider or the primary provider.",
+  fallbackProviderNotFound: "A fallback provider is not registered.",
+  fallbackModelNotAvailable:
+    "A fallback provider does not serve the model of the route.",
+  tooManyFallbackProviders:
+    "Route fallbackProviderIds exceeds the supported number of fallbacks.",
 
   providerHasRoutes: "Provider is still referenced by a route and cannot be removed.",
   modelNotAvailable: "Route model is not available on the referenced provider.",

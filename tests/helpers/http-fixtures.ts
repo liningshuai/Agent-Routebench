@@ -287,3 +287,184 @@ export const ANTHROPIC_CLOSE = [
 
 export const OPENAI_CLOSE =
   'data: {"id":"c","object":"chat.completion.chunk","created":1,"model":"offline-model","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
+
+/* ------------------------------------------------------------------ *
+ * Task 5 fixtures: ordered provider candidates and scripted transports
+ * ------------------------------------------------------------------ */
+
+/** Synthetic, clearly fake, and short enough for the repository secret scan. */
+export const TASK5_SECRET_PRIMARY = "t5-secret-a";
+export const TASK5_SECRET_FALLBACK = "t5-secret-b";
+/** A value shaped like a secret, used only to prove it is rejected/never leaks. */
+export const TASK5_SECRET_PROBE = "TASK5_SYNTHETIC_SECRET_VALUE";
+
+export const TASK5_BASE_URL = "https://api.task5.test/v1";
+export const TASK5_PRIMARY_BASE_URL = "https://primary.task5.test/v1";
+export const TASK5_FALLBACK_BASE_URL = "https://fallback.task5.test/v1";
+export const TASK5_ROUTE_ID = "route-t5";
+export const TASK5_PRIMARY_ID = "primary-main";
+
+export interface CandidateProviderSpec {
+  readonly id: string;
+  readonly protocol?: ProviderProtocol;
+  readonly baseUrl?: string;
+  readonly model?: string;
+  readonly credentialRef?: string | null;
+  readonly enabled?: boolean;
+  /** `null` registers the reference but stores no secret for it. */
+  readonly secret?: string | null;
+}
+
+export interface CandidateRegistryFixture {
+  readonly registry: ProviderRegistry;
+  readonly credentials: InMemoryCredentialStore;
+  readonly routeId: string;
+  readonly model: string;
+  readonly primaryId: string;
+  readonly fallbackIds: readonly string[];
+}
+
+function baseUrlFor(protocol: ProviderProtocol): string {
+  return protocol === "anthropic_messages" ? ANTHROPIC_BASE_URL : OPENAI_BASE_URL;
+}
+
+export function candidateFixture(options: {
+  readonly routeId?: string;
+  readonly model?: string;
+  readonly routeEnabled?: boolean;
+  readonly primary: CandidateProviderSpec;
+  readonly fallbacks?: readonly CandidateProviderSpec[];
+}): CandidateRegistryFixture {
+  const routeId = options.routeId ?? TASK5_ROUTE_ID;
+  const model = options.model ?? DEFAULT_MODEL;
+  const fallbacks = options.fallbacks ?? [];
+
+  const registry = new InMemoryProviderRegistry();
+  const credentials = new InMemoryCredentialStore();
+
+  for (const spec of [options.primary, ...fallbacks]) {
+    const protocol = spec.protocol ?? "anthropic_messages";
+    const credentialRef =
+      spec.credentialRef === undefined ? `credential:${spec.id}` : spec.credentialRef;
+    registry.registerProvider({
+      id: spec.id,
+      name: `Provider ${spec.id}`,
+      protocol,
+      baseUrl: spec.baseUrl ?? baseUrlFor(protocol),
+      credentialRef,
+      models: [spec.model ?? model],
+      // A route may not be registered against a disabled primary provider, so
+      // `enabled: false` specs are applied after the route exists (see below).
+      enabled: true,
+    });
+
+    const secret = spec.secret === undefined ? `${spec.id}-value` : spec.secret;
+    if (credentialRef !== null && secret !== null) {
+      void credentials.set(credentialRef, secret);
+    }
+  }
+
+  registry.registerRoute({
+    id: routeId,
+    name: "Route T5",
+    providerId: options.primary.id,
+    model,
+    enabled: options.routeEnabled ?? true,
+    ...(fallbacks.length === 0
+      ? {}
+      : { fallbackProviderIds: fallbacks.map((spec) => spec.id) }),
+  });
+
+  // A route may not be registered against a disabled primary provider, so a
+  // spec marked `enabled: false` is applied right after the route exists.
+  for (const spec of [options.primary, ...fallbacks]) {
+    if ((spec.enabled ?? true) === false) {
+      const current = registry.getProvider(spec.id);
+      if (current !== undefined && current.enabled) {
+        registry.updateProvider({ ...current, enabled: false });
+      }
+    }
+  }
+
+  return {
+    registry,
+    credentials,
+    routeId,
+    model,
+    primaryId: options.primary.id,
+    fallbackIds: fallbacks.map((spec) => spec.id),
+  };
+}
+
+/** Two providers, both serving the same model, with distinct credentials. */
+export function twoProviderFixture(options: {
+  readonly primaryProtocol?: ProviderProtocol;
+  readonly fallbackProtocol?: ProviderProtocol;
+  readonly primaryEnabled?: boolean;
+  readonly fallbackEnabled?: boolean;
+  readonly primarySecret?: string | null;
+  readonly fallbackSecret?: string | null;
+} = {}): CandidateRegistryFixture {
+  return candidateFixture({
+    primary: {
+      id: TASK5_PRIMARY_ID,
+      protocol: options.primaryProtocol ?? "anthropic_messages",
+      baseUrl: TASK5_PRIMARY_BASE_URL,
+      enabled: options.primaryEnabled ?? true,
+      ...(options.primarySecret === undefined
+        ? { secret: TASK5_SECRET_PRIMARY }
+        : { secret: options.primarySecret }),
+    },
+    fallbacks: [
+      {
+        id: "fallback-second",
+        protocol: options.fallbackProtocol ?? "anthropic_messages",
+        baseUrl: TASK5_FALLBACK_BASE_URL,
+        enabled: options.fallbackEnabled ?? true,
+        ...(options.fallbackSecret === undefined
+          ? { secret: TASK5_SECRET_FALLBACK }
+          : { secret: options.fallbackSecret }),
+      },
+    ],
+  });
+}
+
+export type ScriptedEntry =
+  | HttpResponse
+  | (() => HttpResponse | Promise<HttpResponse>);
+
+/** Marker text used when a script runs out: any overrun is then visible in the events. */
+export const SCRIPT_OVERRUN_TEXT = "script-overrun";
+
+/**
+ * Answers the n-th request with the n-th scripted entry.
+ *
+ * A request beyond the script is answered with a clearly marked success so that
+ * an unexpected extra attempt shows up both in `calls()` and in the emitted
+ * text instead of being silently swallowed.
+ */
+export function createScriptedHttpClient(
+  script: readonly ScriptedEntry[],
+): FakeHttpClient {
+  return createFakeHttpClient((_request, index) => {
+    const entry = script[index];
+    if (entry === undefined) {
+      return anthropicSuccessResponse(SCRIPT_OVERRUN_TEXT);
+    }
+    return typeof entry === "function" ? entry() : entry;
+  });
+}
+
+/** A response that streams a complete Anthropic text answer. */
+export function anthropicSuccessResponse(text = "ok"): HttpResponse {
+  return httpResponse(200, bytesBody(anthropicTextStream(text)));
+}
+
+export function openaiSuccessResponse(text = "ok"): HttpResponse {
+  return httpResponse(200, bytesBody(openaiTextStream(text)));
+}
+
+/** A retryable failure whose body must never be read. */
+export function transportFailureResponse(status = 503): HttpResponse {
+  return httpResponse(status, bytesBody(`{"error":"${TASK5_SECRET_PROBE}"}`));
+}
