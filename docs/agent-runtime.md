@@ -228,10 +228,28 @@ isError: true
 - 事件流中不会出现 credential、header、URL、Authorization、token 或 secret；
 - `AgentLoopOptions` 上没有任何凭据或传输字段。
 
-## 10. 当前不支持
+## 10. 工具策略与审批闸门（Task 7）
+
+Task 6 的 `ToolExecutor` 语义不变。需要审批或策略判断的调用方应当**显式包装**它：
+
+```ts
+const governed = createGovernedToolExecutor({ executor, policy, approvalHandler });
+const loop = createAgentLoop({ gateway, toolExecutor: governed });
+```
+
+`createAgentLoop()` 本身不知道策略与审批的存在。闸门的完整规则见
+[Tool Policy 与审批闸门](tool-policy.md)，要点：
+
+- 没有 `ToolPolicy` → `deny`（fail-closed）；`ask` 而没有 `ToolApprovalHandler`
+  → “审批不可用”；只有精确 `"approved"` 才执行。
+- 决策从不缓存，每个工具调用都重新询问。
+- 所有失败与异常折叠为固定安全结果。
+- policy / approval handler / executor 都通过结构化方法校验，class 实例可用。
+
+## 11. 当前不支持
 
 - 真实供应商 / 真实模型调用（全部测试离线）；
 - 工具结果内容的回放或渲染（事件中没有这个通道）；
-- 审批 UI、自动批准策略、持久化、Memory、上下文压缩；
+- 审批 UI、自动批准策略、审批决策持久化、“记住此选择”、持久化、Memory、上下文压缩；
 - Local Agent API、CLI、Desktop / Tauri 入口；
 - runtime 自身也不做重试与故障转移：那是注入的具体网关（Task 5）的职责。

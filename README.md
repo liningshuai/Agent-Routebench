@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-**Task 6：有界多轮 Agent Loop 与受控工具执行边界**（Task 5 之上）。仓库目前包含：
+**Task 7：Tool Policy、审批闸门与安全工具执行边界**（Task 6 之上）。仓库目前包含：
 
 - pnpm workspace 与 TypeScript 基础配置
 - Vitest 测试入口
@@ -45,6 +45,14 @@
   - 工具调用批量校验后才执行，串行、保序、不并行、不改写 id
   - 已输出正常事件后不会重复请求；取消覆盖 gateway / 工具执行 / 退避全程
   - 事件中**不含工具结果内容**：`tool_execution_completed` 只报告 id 与 `isError`
+- **工具策略与审批闸门 `createGovernedToolExecutor()`（Task 7，同上包）**
+  - 注入式 `ToolPolicy`：返回 `allow` / `deny` / `ask`
+  - 注入式 `ToolApprovalHandler`：仅在 `ask` 时被询问，只有精确 `"approved"` 才放行
+  - **默认 fail-closed**：没有 policy 就是 `deny`，没有审批处理器就是“审批不可用”
+  - 不提供任何工具，也不提供审批 UI；没有持久化、没有“记住此选择”、没有自动批准
+  - policy / handler / executor 都接受对象字面量、`null` 原型对象与 class 实例
+  - 所有失败与异常都折叠为固定安全结果，不回显异常、URL、路径、token 或 secret
+  - `createAgentLoop()` 语义完全不变，闸门是调用方显式包装的可选层
 
 当前**还没有**：
 
@@ -52,6 +60,7 @@
 - 探活请求与模型列表请求
 - shell / 文件 / 网络工具（runtime 不提供任何默认工具，也不具备这些能力）
 - 审批 UI 与自动批准策略
+- 审批决策持久化与 “remember this decision”
 - Local Agent API、CLI、Desktop / Tauri 入口
 - Provider / Route / 凭据的持久化（文件、SQLite、OS Keychain）
 - Memory、上下文压缩
@@ -100,6 +109,8 @@ pnpm evals:deterministic
 - [协议适配器说明](docs/protocol-adapters.md)
 - [HTTP 传输与凭据边界](docs/http-transport.md)
 - [重试、故障转移与 Provider 候选](docs/resilience.md)
+- [Tool Policy、审批闸门与安全执行边界](docs/tool-policy.md)
+- [Task 7 执行报告](docs/verification/task-7-report.md)
 - [Task 6 执行报告](docs/verification/task-6-report.md)
 - [Task 5 执行报告](docs/verification/task-5-report.md)
 - [Task 4 执行报告](docs/verification/task-4-report.md)

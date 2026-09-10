@@ -37,6 +37,8 @@ const required = [
   "docs/verification/task-5-report.md",
   "docs/agent-runtime.md",
   "docs/verification/task-6-report.md",
+  "docs/tool-policy.md",
+  "docs/verification/task-7-report.md",
   "scripts/verify-layout.mjs",
   "packages/agent-contracts/package.json",
   "packages/agent-contracts/src/contracts.ts",
@@ -163,6 +165,12 @@ runScenario("task 6 agent loop and tool boundary", [
   "tests/task-6-agent-runtime-cancellation.test.ts",
 ]);
 
+runScenario("task 7 tool policy and approval gate", [
+  "tests/task-7-tool-policy.test.ts",
+  "tests/task-7-tool-policy-security.test.ts",
+  "tests/task-7-tool-policy-cancellation.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -184,5 +192,11 @@ console.log(
     "fake executor and there is no shell tool, no file tool and no network tool anywhere",
     "in the runtime. Every model request is answered from a scripted offline gateway, so",
     "no real model call happens either.",
+    "Task 7 adds the injected ToolPolicy and ToolApprovalHandler gate in front of that",
+    "executor: it fails closed when no policy is supplied, executes a tool only after an",
+    "explicit 'approved' verdict, and collapses every policy, approval or executor failure",
+    "into a fixed safe result. The policy, the approval handler and the executor in these",
+    "scenarios are all injected fakes; there is no real tool, no approval persistence, no",
+    "remember-decision mechanism, no approval UI and no network access.",
   ].join(" "),
 );

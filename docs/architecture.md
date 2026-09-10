@@ -358,6 +358,39 @@ ModelRequest
   详见 [Agent Runtime](agent-runtime.md)。
 
 
+### Task 7（已完成）
+
+在 `@agent-workbench/agent-runtime` 内新增**注入式**工具执行闸门，位于 Task 6 的
+`ToolExecutor` 之前：
+
+```text
+ToolExecutionRequest → ToolPolicy → allow / deny / ask → ToolApprovalHandler → ToolExecutor
+```
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| 策略与审批类型 | `packages/agent-runtime/src/types.ts` | `ToolPolicyDecision`、`ToolPolicy`、`ToolApprovalDecision`、`ToolApprovalRequest`、`ToolApprovalHandler`、`GovernedToolExecutorOptions` |
+| 闸门实现 | `packages/agent-runtime/src/tool-policy.ts` | `createGovernedToolExecutor()`、固定结果常量、`invalid_tool_policy_options`、结构化 callable method 校验 |
+| 统一导出 | `packages/agent-runtime/src/index.ts` | 公开接口与常量 |
+
+边界：
+
+- **默认 fail-closed**：没有注入 `ToolPolicy` 就是 `deny`；`ask` 而没有
+  `ToolApprovalHandler` 就是“审批不可用”；只有精确返回 `"approved"` 才执行。
+- 闸门是**显式包装层**：`createAgentLoop()` 完全不知道策略与审批的存在，
+  Task 6 的轮次编排、取消、错误清洗、串行执行与消息追加逻辑一行未改。
+- 不提供任何工具：没有 shell 工具、文件工具或网络工具；本包不含
+  `child_process`、`fs`、`http`、`https`、`fetch`、`WebSocket`、`process.env`。
+- 没有审批 UI、没有审批事件、没有决策持久化、没有 “remember this decision”、
+  没有自动批准策略。
+- 所有策略 / 审批 / 执行异常折叠为固定安全结果，不回显 message、stack、URL、
+  路径、`Authorization`、`Bearer`、token 或 secret。
+- policy、approval handler、executor 都通过**结构化方法校验**，因此对象字面量、
+  `null` 原型对象与 class 实例同样可用。
+- 取消覆盖 policy pending、approval pending、批准后执行前与 executor 运行期。
+  详见 [Tool Policy 与审批闸门](tool-policy.md)。
+
+
 ### 后续任务（未实现）
 
 探活与模型列表请求、Provider / Route / 凭据持久化、审批 UI 与自动批准策略、

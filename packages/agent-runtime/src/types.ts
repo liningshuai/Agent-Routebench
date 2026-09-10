@@ -41,6 +41,56 @@ export interface ToolExecutor {
   ): Promise<ToolExecutionResult>;
 }
 
+/**
+ * What a policy may decide about one tool call.
+ *
+ * The runtime never infers a decision: `ask` is the only value that routes to
+ * the approval handler, and anything that is not exactly one of these three
+ * strings is treated as a failure.
+ */
+export type ToolPolicyDecision = "allow" | "deny" | "ask";
+
+/**
+ * An injected, caller owned policy.
+ *
+ * It is a structural interface: an object literal, a null-prototype object and
+ * a class instance are all acceptable. It receives the abort signal so a policy
+ * that consults a human or a service can be cancelled.
+ */
+export interface ToolPolicy {
+  decide(
+    request: ToolExecutionRequest,
+    signal?: AbortSignal,
+  ): ToolPolicyDecision | Promise<ToolPolicyDecision>;
+}
+
+export type ToolApprovalDecision = "approved" | "denied";
+
+export interface ToolApprovalRequest {
+  readonly id: string;
+  readonly name: string;
+  readonly input: JsonValue;
+}
+
+/**
+ * An injected approval gate.
+ *
+ * It never executes anything itself and never persists a decision: this package
+ * has no stored preference, no allow list and no automatic approval.
+ */
+export interface ToolApprovalHandler {
+  requestApproval(
+    request: ToolApprovalRequest,
+    signal?: AbortSignal,
+  ): ToolApprovalDecision | Promise<ToolApprovalDecision>;
+}
+
+export interface GovernedToolExecutorOptions {
+  readonly executor: ToolExecutor;
+  readonly policy?: ToolPolicy;
+  readonly approvalHandler?: ToolApprovalHandler;
+}
+
 export interface AgentLoopOptions {
   readonly gateway: ModelGateway;
   readonly toolExecutor?: ToolExecutor;
