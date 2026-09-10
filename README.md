@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-**Task 2：Provider / Route Registry 与凭据边界**（Task 1 离线契约之上）。仓库目前包含：
+**Task 3：双协议离线 codec——请求转换、SSE 流式解析与离线集成验证**（Task 2 之上）。仓库目前包含：
 
 - pnpm workspace 与 TypeScript 基础配置
 - Vitest 测试入口
@@ -14,24 +14,27 @@
 - 协议无关的 Agent Core 消息/工具/请求契约与运行时校验
 - `ModelGateway` 接口、`ModelStreamEvent` 流事件
 - 完全离线、确定性的 `DeterministicFakeModelGateway`
-- **本地内存 Provider / Route 配置核心 `@agent-workbench/provider-registry`**
-  - `anthropic_messages` 与 `openai_compatible` 两种协议类型
-  - 官方 Provider 预设（Anthropic、OpenAI），不含任何密钥、不自动注册
-  - Provider / Route 的注册、更新、查询、删除
-  - 确定性的 `ResolvedRoute` 解析（只携带 `credentialRef`）
-  - 仅用于测试的内存 `InMemoryCredentialStore`
-- 覆盖契约、Fake Gateway、Agent Core、Provider/Route 与凭据边界的离线测试
+- 本地内存 Provider / Route 配置核心 `@agent-workbench/provider-registry`
+- **双协议离线适配器 `packages/model-gateway/src/adapters`**
+  - `anthropic_messages`：请求编码 + Messages SSE 流式解码（文本 / 客户端工具 / usage）
+  - `openai_compatible`：Chat Completions 请求编码 + SSE 流式解码（仅声明子集）
+  - 共享 SSE 分帧器：UTF-8 跨 chunk、LF/CRLF、多行 data、注释、帧与工具参数上限
+  - 增量输出、单一终止事件、取消即结束、上游错误清洗
+- 本地离线集成测试：适配器 → 最小 ModelGateway 包装 → 既有 Agent Core
 
 当前**还没有**：
 
-- 真实模型调用与网络请求
-- Anthropic Messages / OpenAI-compatible 真实适配器
-- Provider / Route 的持久化（文件、SQLite、OS Keychain）
-- 桌面端（Tauri）与 CLI 功能
-- 会话数据库、工具执行器、审批机制、记忆系统、上下文压缩
+- 真实 HTTP 传输、真实模型调用与网络请求
+- 认证头注入、`CredentialStore` 读取、URL 拼接、探活与模型列表请求
+- Provider 路由调度、重试与故障转移
+- Anthropic / OpenAI-compatible 的真实端到端验证（未连接任何供应商）
+- 多轮 Agent Loop、工具执行、审批
+- Provider / Route / 凭据的持久化（文件、SQLite、OS Keychain）
+- 桌面端（Tauri）与 CLI 功能、Memory、上下文压缩
 
-所有测试默认离线运行，不依赖外部网络服务。Provider / Route 配置当前只存在于内存中，
-进程结束即丢失；凭据只以 `credential:` 引用形式出现在配置里，秘密值单独由凭据库保存。
+所有测试默认离线运行，不依赖外部网络服务。OpenAI-compatible 在本阶段**只覆盖
+Chat Completions 的文本与 function tool 子集**，不代表支持 Responses API、
+Codex 登录或所有 GPT 模型。
 
 ## 目标
 
@@ -65,6 +68,8 @@ pnpm evals:deterministic
 ## 文档
 
 - [架构说明](docs/architecture.md)
+- [协议适配器说明](docs/protocol-adapters.md)
+- [Task 3 执行报告](docs/verification/task-3-report.md)
 - [许可证边界](docs/licensing.md)
 
 ## 许可证
