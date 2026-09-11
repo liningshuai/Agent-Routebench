@@ -123,21 +123,31 @@ describe("task 11 recovery", () => {
     });
   });
 
-  it("uses a fresh IV for each save of the same content", async () => {
+  it("uses a fresh IV when saving identical plaintext", async () => {
     await withTempDir(async (dir) => {
       const filePath = join(dir, "s.json");
       const key = makeKey();
+      // Fixed clock keeps createdAt/updatedAt identical across saves.
       const store = createFileLocalAgentSessionStore({
         filePath,
         encryptionKey: key,
+        clock: () => 1000,
+        idFactory: () => "fixed-session-id",
       });
-      store.create();
-      const first = readFileSync(filePath, "utf8");
-      // Force another save of the same logical state via setStatus.
-      const id = (store as unknown as { create(): { id: string } }).create().id;
-      store.setStatus(id, "idle");
-      const second = readFileSync(filePath, "utf8");
-      expect(first).not.toBe(second);
+      const session = store.create();
+      // First save already happened inside create(); read its envelope.
+      const firstEnvelope = JSON.parse(readFileSync(filePath, "utf8")) as {
+        iv: string;
+      };
+
+      // setStatus("idle") on an already-idle session with a fixed clock
+      // produces byte-identical plaintext JSON, so only the IV can differ.
+      store.setStatus(session.id, "idle");
+      const secondEnvelope = JSON.parse(readFileSync(filePath, "utf8")) as {
+        iv: string;
+      };
+
+      expect(firstEnvelope.iv).not.toBe(secondEnvelope.iv);
     });
   });
 

@@ -274,4 +274,43 @@ describe("task 11 session persistence security", () => {
       ).toThrow(/file is invalid/);
     });
   });
+
+  it("does not leak the file path when saving fails", async () => {
+    await withTempDir(async (dir) => {
+      const filePath = join(dir, "s.json");
+      const key = makeKey();
+      const keyBase64 = Buffer.from(key).toString("base64");
+      const keyHex = Buffer.from(key).toString("hex");
+      const store = createFileLocalAgentSessionStore({
+        filePath,
+        encryptionKey: key,
+      });
+      const session = store.create();
+
+      // Replace the target file with a directory so renameSync fails.
+      const { rmSync, mkdirSync } = await import("node:fs");
+      rmSync(filePath, { force: true });
+      mkdirSync(filePath);
+
+      let message = "";
+      try {
+        store.appendEvent(session.id, userEvent("should-fail"));
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      } finally {
+        rmSync(filePath, { recursive: true, force: true });
+      }
+
+      expect(message).toBe("Session file write failed.");
+      expect(message).not.toContain(filePath);
+      expect(message).not.toContain(dir);
+      expect(message).not.toContain("s.json");
+      expect(message).not.toContain("session-persistence");
+      expect(message).not.toContain("file-session-store");
+      expect(message).not.toMatch(/stack/i);
+      expect(message).not.toContain("ciphertext");
+      expect(message).not.toContain(keyBase64);
+      expect(message).not.toContain(keyHex);
+    });
+  });
 });

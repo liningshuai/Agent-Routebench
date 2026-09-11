@@ -64,13 +64,19 @@
 当前**还没有**：
 
 - 真实供应商端到端验证（没有任何真实模型调用被验证过）
-- 探活请求与模型列表请求
 - shell / 文件 / 网络工具（runtime 不提供任何默认工具，也不具备这些能力）
 - 审批 UI 与自动批准策略
 - 审批决策持久化与 “remember this decision”
-- Local Agent API、CLI、Desktop / Tauri 入口
-- Provider / Route / 凭据的持久化（文件、SQLite、OS Keychain）
+- CLI、Desktop / Tauri 入口
+- CredentialStore secret 持久化与 OS Keychain
 - Memory、上下文压缩
+
+已在早期任务完成、不再列为缺失的能力：
+
+- Provider 健康检查与模型目录发现（Task 10，`@agent-workbench/provider-discovery`）
+- Local Agent API（Task 9，`@agent-workbench/local-agent-api`）
+- Provider / Route 非敏感配置文件持久化（Task 8，`@agent-workbench/local-persistence`）
+- Session 元数据与 AgentEvent 加密文件持久化（Task 11，`@agent-workbench/session-persistence`）
 
 所有测试默认离线运行，不依赖外部网络服务。OpenAI-compatible 在本阶段**只覆盖
 Chat Completions 的文本与 function tool 子集**，不代表支持 Responses API、
@@ -117,11 +123,10 @@ pnpm evals:deterministic
 - [HTTP 传输与凭据边界](docs/http-transport.md)
 - [重试、故障转移与 Provider 候选](docs/resilience.md)
 - [Tool Policy、审批闸门与安全执行边界](docs/tool-policy.md)
-- [Task 7 执行报告](docs/verification/task-7-report.md)
-- [Task 6 执行报告](docs/verification/task-6-report.md)
-- [Task 5 执行报告](docs/verification/task-5-report.md)
-- [Task 4 执行报告](docs/verification/task-4-report.md)
-- [Task 3 执行报告](docs/verification/task-3-report.md)
+- [本地配置持久化](docs/local-persistence.md)
+- [Local Agent API](docs/local-agent-api.md)
+- [Provider Discovery](docs/provider-discovery.md)
+- [Session 加密持久化](docs/session-persistence.md)
 - [许可证边界](docs/licensing.md)
 
 ## 许可证
