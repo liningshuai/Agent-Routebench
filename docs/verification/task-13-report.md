@@ -9,6 +9,8 @@ Node CLI for Local Agent API: `@agent-workbench/cli`
 - Task 13 初始实现: `23359147bc481aa79f74f3685f45599e6a91f0a8` (父提交: `ded4fc938be0af74f2e54aef286c674338ecfd4d`)
 - 第一次收尾修复: `f5e295d9000029699b66191c4aa4b409b4517609` (父提交: `23359147bc481aa79f74f3685f45599e6a91f0a8`)
 - 第二次验证收尾: `d88845f97d262489da4c020561ddf6adec57001a` (父提交: `f5e295d9000029699b66191c4aa4b409b4517609`)
+- 第三次文档修正: `80b2e241c925e246f5ea87310b71e372bb8f0904` (父提交: `d88845f97d262489da4c020561ddf6adec57001a`)
+- 当前最终提交: `80b2e241c925e246f5ea87310b71e372bb8f0904`
 - 分支: `workbench/agent-core`
 - 工作区: 仅 `.superpowers/` 未跟踪
 
@@ -313,7 +315,18 @@ Date:   Fri Sep 11 18:12:45 2026 +0800
 
 docs(cli): finalize Task 13 verification evidence
 
-5 files changed, 89 insertions(+), 43 deletions(-)
+5 files changed, 185 insertions(+), 60 deletions(-)
+```
+
+**第三次文档修正** (当前最终提交):
+```
+commit 80b2e241c925e246f5ea87310b71e372bb8f0904
+Author: liningshuai <3053472115@qq.com>
+Date:   Fri Sep 11 18:25:47 2026 +0800
+
+docs(cli): correct final Task 13 counts and history
+
+2 files changed, 36 insertions(+), 29 deletions(-)
 ```
 
 ## 验证结果
@@ -349,7 +362,17 @@ npm test                                      # 旧语法
 npm test tests/task-13-*.test.ts             # 旧语法
 
 # Git 验证
-git log --oneline -3                         # 查看最近 3 次提交
-git show --stat d88845f                      # 查看最终收尾提交
-git diff f5e295d..d88845f --name-only        # 查看本次修改文件
+git log --oneline -5                         # 查看最近 5 次提交
+git show --stat 80b2e241c925e246f5ea87310b71e372bb8f0904  # 查看当前最终提交
+git diff d88845f97d262489da4c020561ddf6adec57001a HEAD --name-only  # 查看本次修改文件
 ```
+
+## 当前状态
+
+**当前 HEAD**: `80b2e241c925e246f5ea87310b71e372bb8f0904`
+**当前 HEAD^**: `d88845f97d262489da4c020561ddf6adec57001a`
+**工作区状态**: 仅 `.superpowers/` 未跟踪
+**未修改**: 生产代码 (apps/cli/src/**)
+**未修改**: 测试代码 (tests/**)
+**未访问**: 真实网络、真实 Provider、真实凭据
+**未提交**: `.superpowers/` 目录
