@@ -58,7 +58,7 @@ describe("Task 14: Desktop Controller — Connection Management", () => {
     await controller.connect();
     const state = controller.getState();
     expect(state.connection).toBe("failed");
-    expect(state.error).toBe("Failed to connect to Local Agent API.");
+    expect(state.error).toBe("Failed to connect to Desktop API.");
   });
 
   test("should not call load if already loading", async () => {

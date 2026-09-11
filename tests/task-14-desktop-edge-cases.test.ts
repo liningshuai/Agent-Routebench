@@ -31,7 +31,7 @@ describe("Task 14: Desktop Edge Cases — Connection", () => {
     
     const state = controller.getState();
     expect(state.connection).toBe("failed");
-    expect(state.error).toContain("String error");
+    expect(state.error).toBe("Failed to connect to Desktop API.");
   });
 
   test("should allow reconnect after failure", async () => {

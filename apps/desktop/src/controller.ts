@@ -51,10 +51,8 @@ export class DesktopController {
       .then(() => {
         this.setState({ connection: "ready", error: null });
       })
-      .catch((err: unknown) => {
-        const message =
-          err instanceof Error ? err.message : "Failed to connect to Local Agent API.";
-        this.setState({ connection: "failed", error: message });
+      .catch((_err: unknown) => {
+        this.setState({ connection: "failed", error: "Failed to connect to Desktop API." });
       })
       .finally(() => {
         this.loadPromise = null;
@@ -74,11 +72,9 @@ export class DesktopController {
         sessions: [...this.state.sessions, session],
         activeSessionId: session.id,
       });
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to create session.";
-      this.setState({ error: message });
-      throw err;
+    } catch (_err: unknown) {
+      this.setState({ error: "Failed to create session." });
+      throw _err;
     }
   }
 
@@ -106,14 +102,12 @@ export class DesktopController {
           events: [...this.state.events, event],
         });
       }
-    } catch (err: unknown) {
+    } catch (_err: unknown) {
       if (abortController.signal.aborted) {
         throw new Error("Request aborted.");
       }
-      const message =
-        err instanceof Error ? err.message : "Failed to submit turn.";
-      this.setState({ error: message });
-      throw err;
+      this.setState({ error: "Failed to submit turn." });
+      throw _err;
     } finally {
       this.abortControllers.delete(sessionId);
     }
