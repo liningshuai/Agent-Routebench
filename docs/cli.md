@@ -343,26 +343,28 @@ const health = await client.health(); // 不访问真实网络
 
 ## 测试覆盖
 
-CLI 实现包含 127 个自动化测试，覆盖：
+CLI 实现包含 131 个自动化测试，覆盖：
 
 - **参数解析**（59 tests）：loopback 校验、敏感参数拒绝、必需参数、默认值
-- **API 客户端**（29 tests）：HTTP 方法、URL 构造、Content-Type、AbortSignal 传播、错误处理、响应校验
+- **API 客户端**（31 tests）：HTTP 方法、URL 构造、Content-Type、会话包装解析、AbortSignal 传播、错误处理、响应校验
 - **NDJSON 流式解析**（28 tests）：增量解析、UTF-8 跨 chunk、尺寸限制、终止事件、取消、非法数据
-- **命令执行**（8 tests）：命令路由、参数传递、错误处理
-- **安全特性**（3 tests）：固定错误消息、错误码集合、不泄露敏感信息
+- **安全特性**（10 tests）：固定错误消息、错误码集合、不泄露敏感信息
+- **集成测试**（3 tests）：真实 LocalAgentApiServer 端到端工作流
 
 ### 变异测试
 
 执行了 8 项受控变异以验证测试质量：
 
-1. **移除 loopback hostname 检查** → ✅ 检出（`rejects URL with non-loopback hostname`）
-2. **放宽 loopback IP 为 192.168.x.x** → ✅ 检出（同上）
-3. **移除敏感参数检查** → ✅ 检出（14 个 `rejects --apiKey` 等测试）
+1. **移除终止事件验证** → ✅ 检出（`rejects stream without termination event`、`rejects events after completed/error`）
+2. **移除 loopback 检查** → ✅ 检出（`rejects URL with non-loopback hostname`、5 个相关测试）
+3. **移除单行大小限制（256 KiB）** → ✅ 检出（`single line exceeding 256 KiB is rejected`）
 4. **UTF-8 fatal: true 改为 false** → ✅ 检出（新增测试：非法 UTF-8 嵌入 JSON 字符串字段）
-5. **256 KiB 单行上限改为 1 MiB** → ✅ 检出（`single line exceeding 256 KiB is rejected`）
-6. **16 MiB 总量上限改为 32 MiB** → ✅ 检出（`total response exceeding 16 MiB is rejected`）
-7. **移除终止事件校验** → ✅ 检出（`rejects stream without termination event`、`rejects events after completed/error`）
+5. **修改固定错误消息为动态** → ✅ 检出（`error messages are fixed and do not vary`）
+6. **移除 session 响应包装解析** → ✅ 检出（新增测试：`createSession unwraps { session: {...} } wrapper`、`getSession unwraps { session: {...} } wrapper`）
+7. **移除 AbortSignal 预检查** → ✅ 检出（`AbortSignal stops iteration early`、`aborted signal before parsing rejects`）
 8. **移除 POST Content-Type 头** → ✅ 检出（新增测试：所有 POST 端点发送 `application/json`）
+
+**检出率：100% (8/8)**
 
 所有变异均被检出，测试质量达到目标。
 

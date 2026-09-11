@@ -362,7 +362,7 @@ console.log(
     "Task 13 adds the Node CLI for Local Agent API: a type-safe LocalAgentApiClient, NDJSON",
     "streaming parser with UTF-8 fatal validation and size limits, strict loopback-only URL",
     "enforcement, rejection of 14 sensitive parameters, fixed error codes and messages, and",
-    "complete AbortSignal cancellation. All 127 tests use injected fake fetch and stdio;",
+    "complete AbortSignal cancellation. All 131 tests use injected fake fetch and stdio;",
     "integration tests exercise real LocalAgentApiServer instances. No remote network, no",
     "real provider, no persisted credentials.",
   ].join(" "),

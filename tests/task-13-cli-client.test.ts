@@ -566,6 +566,50 @@ describe("task 13 CLI API client HTTP requests", () => {
       });
     });
 
+    test("createSession unwraps { session: {...} } wrapper from server response", async () => {
+      const wrappedResponse = {
+        session: {
+          id: "sess-wrapped",
+          status: "idle",
+          createdAt: 1704067200000,
+          updatedAt: 1704067200000,
+        },
+      };
+
+      const fetch = async (url: string, init?: RequestInit) => {
+        return new Response(JSON.stringify(wrappedResponse), { status: 200 });
+      };
+
+      const client = new LocalAgentApiClient("http://127.0.0.1:4317", fetch);
+      const session = await client.createSession();
+
+      expect(session.id).toBe("sess-wrapped");
+      expect(session.status).toBe("idle");
+      expect(session).not.toHaveProperty("session");
+    });
+
+    test("getSession unwraps { session: {...} } wrapper from server response", async () => {
+      const wrappedResponse = {
+        session: {
+          id: "sess-get-wrapped",
+          status: "running",
+          createdAt: 1704067200000,
+          updatedAt: 1704067300000,
+        },
+      };
+
+      const fetch = async (url: string, init?: RequestInit) => {
+        return new Response(JSON.stringify(wrappedResponse), { status: 200 });
+      };
+
+      const client = new LocalAgentApiClient("http://127.0.0.1:4317", fetch);
+      const session = await client.getSession("sess-get-wrapped");
+
+      expect(session.id).toBe("sess-get-wrapped");
+      expect(session.status).toBe("running");
+      expect(session).not.toHaveProperty("session");
+    });
+
     test("events response must be an array", async () => {
       const fetch = createFakeFetch([{ status: 200, body: JSON.stringify({ not: "array" }) }]);
       const client = new LocalAgentApiClient("http://127.0.0.1:4317", fetch);
