@@ -50,7 +50,7 @@ export class LocalAgentApiClient {
   }
 
   async cancel(id: string, signal?: AbortSignal): Promise<unknown> {
-    const response = await this.#fetchJson("POST", `/v1/sessions/${id}/cancel`, undefined, signal);
+    const response = await this.#fetchJson("POST", `/v1/sessions/${id}/cancel`, {}, signal);
     return response;
   }
 

@@ -5,7 +5,7 @@
 ```text
 Desktop
    |
-CLI
+CLI (Task 13: @agent-workbench/cli)
    |
 Local Agent API
    |
@@ -17,6 +17,23 @@ Model Gateway
    |----------------------|
 Anthropic Messages   OpenAI-compatible
 ```
+
+## 已完成层级
+
+截至 Task 13，以下层级已实现并通过测试：
+
+- **CLI**（`@agent-workbench/cli`）：Node.js 命令行客户端，类型安全的 API 封装、NDJSON 流式解析、严格安全边界
+- **Local Agent API**（`packages/local-agent-api`）：HTTP API 服务器，会话管理、流式轮次、健康检查
+- **Agent Runtime**（`@agent-workbench/agent-runtime`）：多轮 Agent Loop、注入式工具执行、取消支持
+- **Agent Core**（`@agent-workbench/agent-core`）：单次请求校验、事件映射、错误清洗
+- **Model Gateway**（`packages/model-gateway`）：协议适配器（Anthropic Messages、OpenAI-compatible）、HTTP 传输、重试与故障转移
+- **Provider Registry**（`@agent-workbench/provider-registry`）：Provider / Route 配置核心、凭据引用
+- **Session Persistence**（`packages/session-persistence`）：加密会话存储、AgentEvent 持久化
+- **Memory Store**（`@agent-workbench/agent-memory`）：进程内 Memory、确定性上下文压缩
+
+未完成层级：
+
+- **Desktop**：Tauri / Electron 桌面入口（未开始）
 
 ## 契约层与依赖方向
 
@@ -94,10 +111,18 @@ Desktop 与 CLI 共享同一个 Agent Core，以及同一个 Agent Runtime。两
 独立的 Agent Loop。所有会话推进、工具调用编排与模型请求都经由同一运行时路径
 （`@agent-workbench/agent-runtime` → `@agent-workbench/agent-core` → 注入的 `ModelGateway`）。
 
+CLI（Task 13）通过 Local Agent API 访问共享的 Agent Runtime，而非直接编排 Agent Loop。
+
 ### 共享 Local Agent API
 
-Desktop 与 CLI 共享同一个本地 Agent API。UI 层只负责呈现与输入，
-不直接触碰模型协议细节，也不绕过 Agent Core 自行拼装请求。
+Desktop 与 CLI 共享同一个本地 Agent API。CLI 作为 HTTP 客户端调用 Local Agent API 服务器，
+服务器负责 Agent Runtime 编排。UI 层只负责呈现与输入，不直接触碰模型协议细节，
+也不绕过 Agent Core 自行拼装请求。
+
+CLI 安全边界：
+- 仅接受 loopback URL（`http://127.0.0.1` 或 `http://localhost`）
+- 拒绝 14 种敏感命令行参数（`--apiKey`、`--token`、`--secret` 等）
+- 固定错误消息，不泄露 URL、响应 body、路径或异常详情
 
 ### 凭据边界
 

@@ -4,12 +4,15 @@
 
 ## 当前阶段
 
-**Task 12：Memory 与上下文压缩**。在既有能力之上新增：
+**Task 13：Node CLI for Local Agent API**。在既有能力之上新增：
 
-- `@agent-workbench/agent-memory`：进程内 Memory Store + 确定性上下文压缩
-- Memory 由调用方显式写入；搜索为确定性文本匹配
-- 上下文按 UTF-8 字节预算压缩；注入式 ContextSummarizer
-- 保留 system / 最后 user / tool 原子组
+- `@agent-workbench/cli`：Local Agent API 的官方 Node.js 命令行客户端
+- 类型安全的 `LocalAgentApiClient`，完整覆盖所有 API 端点
+- 流式 NDJSON 解析器，UTF-8 fatal 验证、尺寸限制、终止事件校验
+- 严格安全边界：仅 loopback URL、拒绝 14 种敏感参数、固定错误消息
+- 8 种命令：`health`、`create-session`、`get-session`、`list-events`、`cancel`、`run-turn`、`stream-turn`、`version`
+- 依赖注入设计（CliIo、CliRuntime、fetch），127 个离线测试 + 3 个集成测试
+- 完整的取消支持：AbortSignal 贯穿全程、信号处理器（SIGINT/SIGTERM）
 
 此前已有：
 
@@ -54,12 +57,17 @@
   - 事件中**不含工具结果内容**：`tool_execution_completed` 只报告 id 与 `isError`
 - **工具策略与审批闸门 `createGovernedToolExecutor()`（Task 7，同上包）**
   - 注入式 `ToolPolicy`：返回 `allow` / `deny` / `ask`
-  - 注入式 `ToolApprovalHandler`：仅在 `ask` 时被询问，只有精确 `"approved"` 才放行
-  - **默认 fail-closed**：没有 policy 就是 `deny`，没有审批处理器就是“审批不可用”
-  - 不提供任何工具，也不提供审批 UI；没有持久化、没有“记住此选择”、没有自动批准
+  - 注入式 `ToolApprovalHandler`：仅在 `ask` 时被询问，只有精确 `”approved”` 才放行
+  - **默认 fail-closed**：没有 policy 就是 `deny`，没有审批处理器就是”审批不可用”
+  - 不提供任何工具，也不提供审批 UI；没有持久化、没有”记住此选择”、没有自动批准
   - policy / handler / executor 都接受对象字面量、`null` 原型对象与 class 实例
   - 所有失败与异常都折叠为固定安全结果，不回显异常、URL、路径、token 或 secret
   - `createAgentLoop()` 语义完全不变，闸门是调用方显式包装的可选层
+- **Provider / Route 非敏感配置持久化（Task 8）**
+- **Local Agent API（Task 9）**
+- **Provider 健康检查与模型目录发现（Task 10）**
+- **Session 元数据与 AgentEvent 加密持久化（Task 11）**
+- **Memory Store 与上下文压缩（Task 12）**
 
 当前**还没有**：
 
@@ -67,17 +75,18 @@
 - shell / 文件 / 网络工具（runtime 不提供任何默认工具，也不具备这些能力）
 - 审批 UI 与自动批准策略
 - 审批决策持久化与 “remember this decision”
-- CLI、Desktop / Tauri 入口
+- Desktop / Tauri 入口（CLI 已在 Task 13 完成）
 - CredentialStore secret 持久化与 OS Keychain
 - 持久化 Memory、向量搜索、真实模型摘要调用
 
 已在早期任务完成、不再列为缺失的能力：
 
-- Provider 健康检查与模型目录发现（Task 10）
+- Provider / Route 非敏感配置持久化（Task 8）
 - Local Agent API（Task 9）
-- Provider / Route 非敏感配置文件持久化（Task 8）
+- Provider 健康检查与模型目录发现（Task 10）
 - Session 元数据与 AgentEvent 加密文件持久化（Task 11）
 - Memory Store 与上下文压缩（Task 12）
+- Node CLI for Local Agent API（Task 13）
 
 所有测试默认离线运行，不依赖外部网络服务。OpenAI-compatible 在本阶段**只覆盖
 Chat Completions 的文本与 function tool 子集**，不代表支持 Responses API、
@@ -128,6 +137,7 @@ pnpm evals:deterministic
 - [Local Agent API](docs/local-agent-api.md)
 - [Provider Discovery](docs/provider-discovery.md)
 - [Session 加密持久化](docs/session-persistence.md)
+- [Node CLI for Local Agent API](docs/cli.md)
 - [许可证边界](docs/licensing.md)
 
 ## 许可证

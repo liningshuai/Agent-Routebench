@@ -131,6 +131,23 @@ const required = [
   "packages/agent-memory/src/context-validation.ts",
   "packages/agent-memory/src/context-builder.ts",
   "packages/agent-memory/src/index.ts",
+  "apps/cli/package.json",
+  "apps/cli/tsconfig.json",
+  "apps/cli/src/index.ts",
+  "apps/cli/src/main.ts",
+  "apps/cli/src/cli.ts",
+  "apps/cli/src/args.ts",
+  "apps/cli/src/api-client.ts",
+  "apps/cli/src/ndjson.ts",
+  "apps/cli/src/errors.ts",
+  "docs/cli.md",
+  "docs/verification/task-13-report.md",
+  "tests/helpers/cli-fixtures.ts",
+  "tests/task-13-cli-args.test.ts",
+  "tests/task-13-cli-client.test.ts",
+  "tests/task-13-cli-streaming.test.ts",
+  "tests/task-13-cli-security.test.ts",
+  "tests/task-13-cli-integration.test.ts",
   "tests/helpers/adapter-fixtures.ts",
   "tests/helpers/http-fixtures.ts",
   "tests/helpers/runtime-fixtures.ts",
@@ -283,6 +300,14 @@ runScenario("task 12 memory and context compaction", [
   "tests/task-12-context-cancellation.test.ts",
 ]);
 
+runScenario("task 13 node CLI for local agent API", [
+  "tests/task-13-cli-args.test.ts",
+  "tests/task-13-cli-client.test.ts",
+  "tests/task-13-cli-streaming.test.ts",
+  "tests/task-13-cli-security.test.ts",
+  "tests/task-13-cli-integration.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -334,5 +359,11 @@ console.log(
     "with explicit caller-provided entries and deterministic text search, plus a context",
     "builder that compresses by UTF-8 byte budget using an injected fake summarizer.",
     "No real model summarization, no persistence, no network, no CredentialStore.",
+    "Task 13 adds the Node CLI for Local Agent API: a type-safe LocalAgentApiClient, NDJSON",
+    "streaming parser with UTF-8 fatal validation and size limits, strict loopback-only URL",
+    "enforcement, rejection of 14 sensitive parameters, fixed error codes and messages, and",
+    "complete AbortSignal cancellation. All 127 tests use injected fake fetch and stdio;",
+    "integration tests exercise real LocalAgentApiServer instances. No remote network, no",
+    "real provider, no persisted credentials.",
   ].join(" "),
 );

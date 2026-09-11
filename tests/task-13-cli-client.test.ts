@@ -107,6 +107,66 @@ describe("task 13 CLI API client HTTP requests", () => {
     });
   });
 
+  describe("POST Content-Type headers", () => {
+    test("POST /v1/sessions sends application/json Content-Type", async () => {
+      let capturedContentType = "";
+
+      const fetch = async (url: string, init?: RequestInit) => {
+        const headers = new Headers(init?.headers);
+        capturedContentType = headers.get("content-type") || "";
+        return new Response(
+          JSON.stringify({ id: "s", status: "idle", createdAt: 1, updatedAt: 1 }),
+          { status: 200 },
+        );
+      };
+
+      const client = new LocalAgentApiClient("http://127.0.0.1:4317", fetch);
+      await client.createSession();
+
+      expect(capturedContentType).toBe("application/json");
+    });
+
+    test("POST /v1/sessions/:id/cancel sends application/json Content-Type", async () => {
+      let capturedContentType = "";
+
+      const fetch = async (url: string, init?: RequestInit) => {
+        const headers = new Headers(init?.headers);
+        capturedContentType = headers.get("content-type") || "";
+        return new Response(JSON.stringify({ cancelled: true }), { status: 200 });
+      };
+
+      const client = new LocalAgentApiClient("http://127.0.0.1:4317", fetch);
+      await client.cancel("sess-123");
+
+      expect(capturedContentType).toBe("application/json");
+    });
+
+    test("POST /v1/sessions/:id/turns sends application/json Content-Type", async () => {
+      let capturedContentType = "";
+
+      const fetch = async (url: string, init?: RequestInit) => {
+        const headers = new Headers(init?.headers);
+        capturedContentType = headers.get("content-type") || "";
+        return new Response("", { status: 200 });
+      };
+
+      const client = new LocalAgentApiClient("http://127.0.0.1:4317", fetch);
+      const request: LocalAgentTurnRequest = {
+        messages: [{ role: "user", content: [{ type: "text", text: "Test" }] }],
+      };
+
+      const stream = client.runTurn("sess-456", request);
+      try {
+        for await (const _ of stream) {
+        }
+      } catch {
+        // ignore protocol errors
+      }
+
+      expect(capturedContentType).toBe("application/json");
+    });
+  });
+
   describe("getSession", () => {
     test("GET /v1/sessions/:id", async () => {
       let capturedUrl = "";
@@ -146,15 +206,15 @@ describe("task 13 CLI API client HTTP requests", () => {
   });
 
   describe("cancel", () => {
-    test("POST /v1/sessions/:id/cancel with no body", async () => {
+    test("POST /v1/sessions/:id/cancel with empty JSON body", async () => {
       let capturedUrl = "";
       let capturedMethod = "";
-      let capturedBody: string | null = null;
+      let capturedBody = "";
 
       const fetch = async (url: string, init?: RequestInit) => {
         capturedUrl = url;
         capturedMethod = init?.method || "GET";
-        capturedBody = init?.body?.toString() || null;
+        capturedBody = init?.body?.toString() || "";
         return new Response(JSON.stringify({ cancelled: true }), { status: 200 });
       };
 
@@ -163,7 +223,7 @@ describe("task 13 CLI API client HTTP requests", () => {
 
       expect(capturedUrl).toBe("http://127.0.0.1:8080/v1/sessions/sess-xyz/cancel");
       expect(capturedMethod).toBe("POST");
-      expect(capturedBody).toBeNull();
+      expect(capturedBody).toBe("{}");
     });
   });
 

@@ -412,6 +412,38 @@ describe("task 13 CLI NDJSON streaming", () => {
       });
     });
 
+    test("invalid UTF-8 inside JSON string field is rejected with fatal validation", async () => {
+      // Build a JSON object with illegal UTF-8 bytes embedded in a string field
+      // Structure: {"type":"text_delta","requestId":"r","text":"<INVALID_UTF8>"}\n
+      const prefix = '{"type":"text_delta","requestId":"r","text":"';
+      const suffix = '"}\n';
+      
+      const prefixBytes = new TextEncoder().encode(prefix);
+      const suffixBytes = new TextEncoder().encode(suffix);
+      const invalidUtf8 = new Uint8Array([0xff, 0xfe]); // Invalid UTF-8 sequence
+      
+      // Concatenate: valid UTF-8 prefix + invalid bytes + valid UTF-8 suffix
+      const combined = new Uint8Array(prefixBytes.length + invalidUtf8.length + suffixBytes.length);
+      combined.set(prefixBytes, 0);
+      combined.set(invalidUtf8, prefixBytes.length);
+      combined.set(suffixBytes, prefixBytes.length + invalidUtf8.length);
+
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(combined);
+          controller.close();
+        },
+      });
+
+      // With fatal:true, TextDecoder must throw on invalid UTF-8
+      await expect(async () => {
+        for await (const _ of parseNDJSONStream(stream)) {
+        }
+      }).rejects.toMatchObject({
+        code: CLI_ERROR_CODES.apiProtocolError,
+      });
+    });
+
     test("empty stream is rejected", async () => {
       const stream = makeStream([]);
 
