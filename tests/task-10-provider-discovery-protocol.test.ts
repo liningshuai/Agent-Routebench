@@ -393,3 +393,84 @@ describe("task 10 protocol normalization", () => {
     expect(catalog.models[0]?.displayName).toBe("中文名称");
   });
 });
+
+describe("task 10 invalid UTF-8 rejection", () => {
+  async function discoveryWithRawBytes(chunks: Uint8Array[]) {
+    const registry = await makeRegistry([makeAnthropicProvider()]);
+    const credentialStore = await makeCredentialStore();
+    const { client } = fakeHttpClient(() => ({
+      status: 200,
+      body: bodyFromChunks(chunks),
+    }));
+    return createProviderDiscovery({
+      registry,
+      credentialStore,
+      httpClient: client,
+    });
+  }
+
+  it("rejects invalid UTF-8 bytes inside a JSON string value", async () => {
+    // 0xFF is never valid in UTF-8. Embed it inside display_name.
+    const prefix = new TextEncoder().encode(
+      '{"data":[{"id":"model","display_name":"',
+    );
+    const invalid = new Uint8Array([0xff]);
+    const suffix = new TextEncoder().encode('"}]}');
+    const discovery = await discoveryWithRawBytes([prefix, invalid, suffix]);
+
+    await expect(discovery.listModels("anthropic-main")).rejects.toMatchObject({
+      code: "provider_protocol_error",
+    });
+    await expect(discovery.checkProvider("anthropic-main")).resolves.toMatchObject(
+      { status: "protocol_error" },
+    );
+  });
+
+  it("rejects invalid UTF-8 split across chunks", async () => {
+    // C3 28 is an invalid two-byte sequence; split so each chunk alone looks
+    // incomplete and the decoder must still reject the stream.
+    const prefix = new TextEncoder().encode('{"data":[{"id":"x","display_name":"');
+    const broken = new Uint8Array([0xc3, 0x28]);
+    const suffix = new TextEncoder().encode('"}]}');
+    const discovery = await discoveryWithRawBytes([
+      prefix,
+      broken.slice(0, 1),
+      broken.slice(1),
+      suffix,
+    ]);
+
+    await expect(discovery.listModels("anthropic-main")).rejects.toMatchObject({
+      code: "provider_protocol_error",
+    });
+  });
+
+  it("rejects invalid UTF-8 outside a JSON string while still looking like JSON", async () => {
+    // Valid JSON prefix, then a lone 0xC0 (always invalid), then more JSON text.
+    const text = new TextEncoder().encode('{"data":[]}');
+    const withGarbage = new Uint8Array(text.length + 1);
+    withGarbage.set(text, 0);
+    withGarbage[text.length] = 0xc0;
+    const discovery = await discoveryWithRawBytes([withGarbage]);
+
+    await expect(discovery.listModels("anthropic-main")).rejects.toMatchObject({
+      code: "provider_protocol_error",
+    });
+  });
+
+  it("does not return a catalog containing the replacement character", async () => {
+    const prefix = new TextEncoder().encode('{"data":[{"id":"m1","display_name":"');
+    const invalid = new Uint8Array([0xed, 0xa0, 0x80]);
+    const suffix = new TextEncoder().encode('"}]}');
+    const discovery = await discoveryWithRawBytes([prefix, invalid, suffix]);
+
+    let result: unknown;
+    try {
+      result = await discovery.listModels("anthropic-main");
+    } catch (error) {
+      expect(error).toMatchObject({ code: "provider_protocol_error" });
+      return;
+    }
+    // If it somehow resolved, it must not contain U+FFFD.
+    expect(JSON.stringify(result)).not.toContain("�");
+  });
+});

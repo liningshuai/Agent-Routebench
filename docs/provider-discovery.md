@@ -73,6 +73,21 @@ GET 无 body；secret 不进入 URL。
 - 源码无 `fetch(`、`node:http`、`process.env`、`console.log`、`node:fs`
 - 无重试、无故障转移、无缓存
 
+## 取消语义
+
+- HTTP Promise 与 `AbortSignal` **竞速**；abort 先发生时立即返回 `aborted`
+- 不等待挂起的 HTTP Promise，也不等待 body `return()`
+- 迟到 resolve 会主动释放 `response.body`
+- 迟到 reject 被消费，不产生 unhandled rejection
+- 预取消时：Registry 不读、CredentialStore 不读、HttpClient 不调用
+
+## UTF-8 校验
+
+响应体使用 `TextDecoder("utf-8", { fatal: true })`。
+
+非法 UTF-8（JSON 内外、跨 chunk）一律抛出固定 `provider_protocol_error`，
+不会返回含替换字符 `�` 的成功 catalog。合法中文、emoji 与多字节跨 chunk 拼接仍支持。
+
 ## 未实现
 
 - CLI / Desktop / Tauri / Web UI

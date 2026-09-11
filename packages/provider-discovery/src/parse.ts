@@ -118,7 +118,7 @@ export async function readBodyText(
   maxBytes: number,
   signal: AbortSignal | undefined,
 ): Promise<string> {
-  const decoder = new TextDecoder("utf-8", { fatal: false });
+  const decoder = new TextDecoder("utf-8", { fatal: true });
   const chunks: Uint8Array[] = [];
   let size = 0;
 
@@ -186,5 +186,10 @@ export async function readBodyText(
     merged.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return decoder.decode(merged);
+  try {
+    return decoder.decode(merged);
+  } catch {
+    // Invalid UTF-8 must not become a replacement-character catalog.
+    failDiscovery("providerProtocolError");
+  }
 }

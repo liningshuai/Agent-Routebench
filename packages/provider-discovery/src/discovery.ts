@@ -182,28 +182,88 @@ function buildRequest(
   };
 }
 
+/**
+ * Races the HTTP Promise against AbortSignal.
+ *
+ * A transport that never settles must not block cancellation: abort wins
+ * immediately. Late resolve releases the response body; late reject is
+ * consumed so it cannot become an unhandled rejection.
+ */
 async function fetchCatalogText(
   httpClient: DiscoveryHttpClient,
   request: DiscoveryHttpRequest,
   maxResponseBytes: number,
 ): Promise<string> {
-  let response;
-  try {
-    response = await httpClient(request);
-  } catch (error) {
-    if (
-      error instanceof ProviderDiscoveryError &&
-      error.code === "aborted"
-    ) {
-      failDiscovery("aborted");
+  const signal = request.signal;
+
+  if (isAborted(signal)) {
+    failDiscovery("aborted");
+  }
+
+  let httpSettled = false;
+  const httpPromise = (async () => {
+    try {
+      const response = await httpClient(request);
+      httpSettled = true;
+      return { kind: "ok" as const, response };
+    } catch (error) {
+      httpSettled = true;
+      if (
+        error instanceof ProviderDiscoveryError &&
+        error.code === "aborted"
+      ) {
+        return { kind: "err" as const, aborted: true };
+      }
+      if (isAborted(signal)) {
+        return { kind: "err" as const, aborted: true };
+      }
+      return { kind: "err" as const, aborted: false };
     }
-    if (isAborted(request.signal)) {
+  })();
+
+  // Always attach a consumer so a late reject cannot surface as unhandled.
+  httpPromise.then(undefined, () => undefined);
+
+  const abortPromise =
+    signal === undefined
+      ? new Promise<{ kind: "abort" }>(() => {
+          // never settles when there is no signal
+        })
+      : new Promise<{ kind: "abort" }>((resolve) => {
+          if (signal.aborted) {
+            resolve({ kind: "abort" });
+            return;
+          }
+          signal.addEventListener("abort", () => resolve({ kind: "abort" }), {
+            once: true,
+          });
+        });
+
+  const winner = await Promise.race([httpPromise, abortPromise]);
+
+  if (winner.kind === "abort") {
+    // Swallow a late HTTP settlement; release its body when it arrives.
+    void httpPromise.then(
+      (result) => {
+        if (result.kind === "ok") {
+          releaseResponseBody(result.response.body);
+        }
+      },
+      () => undefined,
+    );
+    failDiscovery("aborted");
+  }
+
+  if (winner.kind === "err") {
+    if (winner.aborted || isAborted(signal)) {
       failDiscovery("aborted");
     }
     failDiscovery("upstreamUnavailable");
   }
 
-  if (isAborted(request.signal)) {
+  const response = winner.response;
+
+  if (isAborted(signal)) {
     releaseResponseBody(response.body);
     failDiscovery("aborted");
   }
@@ -217,7 +277,7 @@ async function fetchCatalogText(
     failDiscovery("providerProtocolError");
   }
 
-  return readBodyText(response.body, maxResponseBytes, request.signal);
+  return readBodyText(response.body, maxResponseBytes, signal);
 }
 
 async function loadCatalog(
