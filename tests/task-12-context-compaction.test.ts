@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildContext, estimateContextBytes } from "../packages/agent-memory/src/index.js";
+import {
+  ContextError,
+  buildContext,
+  estimateContextBytes,
+} from "../packages/agent-memory/src/index.js";
 import {
   assistantText,
   assistantToolCall,
@@ -375,5 +379,99 @@ describe("task 12 context compaction", () => {
       .map((c) => (c.type === "text" ? c.text : ""))
       .join("");
     expect(text).toContain("- [preference] uses pnpm");
+  });
+});
+
+describe("task 12 final fix: synchronous summarizer exceptions", () => {
+  function overflowingMessages(): ReturnType<typeof userText>[] {
+    const messages = Array.from({ length: 12 }, (_, i) =>
+      userText(`q${String(i)} ${"z".repeat(50)}`),
+    );
+    messages.push(userText("end"));
+    return messages;
+  }
+
+  it("maps a synchronous summarizer throw to the fixed safe error", async () => {
+    const raw = new Error(
+      "RAW_SECRET sk-live-abcdef https://evil.invalid/steal?token=1 C:\\Users\\leak\\secret.txt",
+    );
+    raw.stack =
+      "Error: RAW_SECRET https://evil.invalid/steal\n    at leaky (/leaky/secret-path.ts:1:1)";
+    let caught: unknown;
+    let resolved: unknown;
+    try {
+      resolved = await buildContext({
+        messages: overflowingMessages(),
+        maxContextBytes: 500,
+        summarizer: {
+          summarize() {
+            throw raw;
+          },
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(resolved).toBeUndefined();
+    expect(caught).toBeInstanceOf(ContextError);
+    expect((caught as ContextError).code).toBe("context_compression_failed");
+    expect((caught as ContextError).message).toBe("Context compression failed.");
+    expect((caught as ContextError).message).not.toContain("RAW_SECRET");
+    expect((caught as ContextError).message).not.toContain("evil.invalid");
+    expect((caught as ContextError).stack ?? "").not.toContain("RAW_SECRET");
+    expect((caught as ContextError).stack ?? "").not.toContain("evil.invalid");
+    expect((caught as ContextError).stack ?? "").not.toContain("secret-path");
+  });
+
+  it("sanitizes synchronous throws from class summarizers", async () => {
+    class ThrowingSummarizer {
+      summarize(): string {
+        throw new Error(
+          "RAW_SECRET class leak https://evil.invalid/class C:/leaky/path.txt",
+        );
+      }
+    }
+    let caught: unknown;
+    let resolved: unknown;
+    try {
+      resolved = await buildContext({
+        messages: overflowingMessages(),
+        maxContextBytes: 500,
+        summarizer: new ThrowingSummarizer(),
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(resolved).toBeUndefined();
+    expect(caught).toBeInstanceOf(ContextError);
+    expect((caught as ContextError).code).toBe("context_compression_failed");
+    expect((caught as ContextError).message).toBe("Context compression failed.");
+    expect((caught as ContextError).message).not.toContain("RAW_SECRET");
+    expect((caught as ContextError).message).not.toContain("evil.invalid");
+  });
+
+  it("maps a synchronous summarizer throw to the fixed safe error when a signal is present", async () => {
+    const controller = new AbortController();
+    let caught: unknown;
+    let resolved: unknown;
+    try {
+      resolved = await buildContext({
+        messages: overflowingMessages(),
+        maxContextBytes: 500,
+        signal: controller.signal,
+        summarizer: {
+          summarize() {
+            throw new Error("RAW_SECRET with-signal https://evil.invalid/sig");
+          },
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(resolved).toBeUndefined();
+    expect(caught).toBeInstanceOf(ContextError);
+    expect((caught as ContextError).code).toBe("context_compression_failed");
+    expect((caught as ContextError).message).toBe("Context compression failed.");
+    expect((caught as ContextError).message).not.toContain("RAW_SECRET");
   });
 });

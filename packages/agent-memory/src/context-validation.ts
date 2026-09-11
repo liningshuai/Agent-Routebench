@@ -6,7 +6,12 @@ import type {
   ContextSummarizer,
   MemoryEntry,
 } from "./types.js";
-import { DEFAULT_MAX_SUMMARY_BYTES } from "./types.js";
+import {
+  DEFAULT_MAX_MEMORY_CONTENT_BYTES,
+  DEFAULT_MAX_MEMORY_TAGS,
+  DEFAULT_MAX_MEMORY_TAG_BYTES,
+  DEFAULT_MAX_SUMMARY_BYTES,
+} from "./types.js";
 
 const ALLOWED_OPTION_FIELDS = new Set([
   "messages",
@@ -43,11 +48,31 @@ const MEMORY_ALLOWED_FIELDS = new Set([
 
 const KINDS = new Set(["fact", "preference", "decision", "todo"]);
 
+// Same id rule the in-memory store enforces on save().
+const MEMORY_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
   }
   return true;
+}
+
+/**
+ * Runtime shape check for caller-supplied cancellation signals. `null` and
+ * plain objects without a boolean `aborted` and a callable `addEventListener`
+ * must be rejected here, otherwise the cancellation path raises a raw native
+ * TypeError instead of a fixed safe error.
+ */
+function isAbortSignalLike(value: unknown): value is AbortSignal {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as { aborted?: unknown; addEventListener?: unknown };
+  return (
+    typeof candidate.aborted === "boolean" &&
+    typeof candidate.addEventListener === "function"
+  );
 }
 
 export function estimateContextBytes(messages: readonly AgentMessage[]): number {
@@ -77,10 +102,16 @@ export function assertMemoryEntry(
       failContext("invalidMemory");
     }
   }
-  if (typeof input.id !== "string" || input.id.length === 0) {
+  if (
+    typeof input.id !== "string" ||
+    !MEMORY_ID_PATTERN.test(input.id)
+  ) {
     failContext("invalidMemory");
   }
-  if (typeof input.scopeId !== "string" || input.scopeId.length === 0) {
+  if (
+    typeof input.scopeId !== "string" ||
+    !MEMORY_ID_PATTERN.test(input.scopeId)
+  ) {
     failContext("invalidMemory");
   }
   if (typeof input.kind !== "string" || !KINDS.has(input.kind)) {
@@ -89,8 +120,27 @@ export function assertMemoryEntry(
   if (typeof input.content !== "string" || input.content.length === 0) {
     failContext("invalidMemory");
   }
-  if (!Array.isArray(input.tags)) {
+  if (input.content.includes("\0")) {
     failContext("invalidMemory");
+  }
+  if (Buffer.byteLength(input.content, "utf8") > DEFAULT_MAX_MEMORY_CONTENT_BYTES) {
+    failContext("invalidMemory");
+  }
+  if (!Array.isArray(input.tags) || input.tags.length > DEFAULT_MAX_MEMORY_TAGS) {
+    failContext("invalidMemory");
+  }
+  const seenTags = new Set<string>();
+  for (const tag of input.tags) {
+    if (typeof tag !== "string" || tag.length === 0 || tag.includes("\0")) {
+      failContext("invalidMemory");
+    }
+    if (seenTags.has(tag)) {
+      failContext("invalidMemory");
+    }
+    if (Buffer.byteLength(tag, "utf8") > DEFAULT_MAX_MEMORY_TAG_BYTES) {
+      failContext("invalidMemory");
+    }
+    seenTags.add(tag);
   }
   if (
     typeof input.createdAt !== "number" ||
@@ -190,10 +240,12 @@ export function parseBuildOptions(
   }
 
   const signal = raw.signal;
-  if (signal !== undefined && signal !== null) {
-    if (typeof signal !== "object" || typeof (signal as AbortSignal).aborted !== "boolean") {
+  let validatedSignal: AbortSignal | undefined;
+  if (signal !== undefined) {
+    if (!isAbortSignalLike(signal)) {
       failContext("invalidOptions");
     }
+    validatedSignal = signal;
   }
 
   return {
@@ -202,7 +254,7 @@ export function parseBuildOptions(
     maxContextBytes,
     maxSummaryBytes,
     summarizer,
-    signal: signal as AbortSignal | undefined,
+    signal: validatedSignal,
   };
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildContext } from "../packages/agent-memory/src/index.js";
+import { ContextError, buildContext } from "../packages/agent-memory/src/index.js";
 import { userText } from "./helpers/memory-fixtures.js";
 
 function longMessages(): ReturnType<typeof userText>[] {
@@ -214,5 +214,156 @@ describe("task 12 context cancellation", () => {
     await expect(buildContext([] as never)).rejects.toMatchObject({
       code: "invalid_context_options",
     });
+  });
+});
+
+describe("task 12 final fix: abort signal runtime validation", () => {
+  async function captureBuild(
+    signal: unknown,
+  ): Promise<{ caught?: unknown; resolved?: unknown }> {
+    let caught: unknown;
+    let resolved: unknown;
+    try {
+      resolved = await buildContext({
+        messages: [userText("hi")],
+        maxContextBytes: 10_000,
+        signal: signal as never,
+      });
+    } catch (error) {
+      caught = error;
+    }
+    return { caught, resolved };
+  }
+
+  it("rejects a null signal with the fixed options error", async () => {
+    const { caught, resolved } = await captureBuild(null);
+    expect(resolved).toBeUndefined();
+    expect(caught).toBeInstanceOf(ContextError);
+    expect((caught as ContextError).code).toBe("invalid_context_options");
+    expect((caught as ContextError).message).toBe("Context options are invalid.");
+    expect((caught as ContextError).name).not.toBe("TypeError");
+  });
+
+  it("rejects an empty object signal", async () => {
+    const { caught, resolved } = await captureBuild({});
+    expect(resolved).toBeUndefined();
+    expect(caught).toBeInstanceOf(ContextError);
+    expect((caught as ContextError).code).toBe("invalid_context_options");
+    expect((caught as ContextError).message).toBe("Context options are invalid.");
+    expect((caught as ContextError).name).not.toBe("TypeError");
+  });
+
+  it("rejects a signal object that only has an aborted flag", async () => {
+    const { caught, resolved } = await captureBuild({ aborted: false });
+    expect(resolved).toBeUndefined();
+    expect(caught).toBeInstanceOf(ContextError);
+    expect((caught as ContextError).code).toBe("invalid_context_options");
+    expect((caught as ContextError).message).toBe("Context options are invalid.");
+    expect((caught as ContextError).name).not.toBe("TypeError");
+  });
+
+  it("rejects a signal whose addEventListener is not callable", async () => {
+    const { caught, resolved } = await captureBuild({
+      aborted: false,
+      addEventListener: 1,
+    });
+    expect(resolved).toBeUndefined();
+    expect(caught).toBeInstanceOf(ContextError);
+    expect((caught as ContextError).code).toBe("invalid_context_options");
+    expect((caught as ContextError).message).toBe("Context options are invalid.");
+    expect((caught as ContextError).name).not.toBe("TypeError");
+  });
+
+  it("rejects a signal whose aborted flag is not a boolean", async () => {
+    const { caught, resolved } = await captureBuild({
+      aborted: "false",
+      addEventListener() {},
+    });
+    expect(resolved).toBeUndefined();
+    expect(caught).toBeInstanceOf(ContextError);
+    expect((caught as ContextError).code).toBe("invalid_context_options");
+    expect((caught as ContextError).message).toBe("Context options are invalid.");
+    expect((caught as ContextError).name).not.toBe("TypeError");
+  });
+
+  it("accepts a native AbortController signal", async () => {
+    const controller = new AbortController();
+    const result = await buildContext({
+      messages: [userText("hi")],
+      maxContextBytes: 10_000,
+      signal: controller.signal,
+    });
+    expect(result.compressed).toBe(false);
+  });
+
+  it("rejects a pre-cancelled native signal with a ContextError, not a native TypeError", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let calls = 0;
+    let caught: unknown;
+    try {
+      await buildContext({
+        messages: longMessages(),
+        maxContextBytes: 400,
+        signal: controller.signal,
+        summarizer: {
+          async summarize() {
+            calls += 1;
+            return "s";
+          },
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(calls).toBe(0);
+    expect(caught).toBeInstanceOf(ContextError);
+    expect((caught as ContextError).name).not.toBe("TypeError");
+    expect((caught as ContextError).code).toBe("context_aborted");
+    expect((caught as ContextError).message).toBe("Context build aborted.");
+  });
+
+  it("cancels a pending summarizer without native errors or unhandled rejections", async () => {
+    const rejections: unknown[] = [];
+    const onRejection = (reason: unknown) => {
+      rejections.push(reason);
+    };
+    process.on("unhandledRejection", onRejection);
+    try {
+      const controller = new AbortController();
+      let release!: (value: string) => void;
+      let entered = 0;
+      const pending = buildContext({
+        messages: longMessages(),
+        maxContextBytes: 400,
+        signal: controller.signal,
+        summarizer: {
+          async summarize() {
+            entered += 1;
+            return new Promise<string>((resolve) => {
+              release = resolve;
+            });
+          },
+        },
+      });
+      const abortTimer = setTimeout(() => controller.abort(), 10);
+      let caught: unknown;
+      try {
+        await pending;
+      } catch (error) {
+        caught = error;
+      }
+      clearTimeout(abortTimer);
+      expect(entered).toBe(1);
+      expect(caught).toBeInstanceOf(ContextError);
+      expect((caught as ContextError).name).not.toBe("TypeError");
+      expect((caught as ContextError).code).toBe("context_aborted");
+      expect((caught as ContextError).message).toBe("Context build aborted.");
+      release("late-resolve-after-abort");
+      await new Promise((r) => setTimeout(r, 20));
+      expect(rejections).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onRejection);
+    }
   });
 });

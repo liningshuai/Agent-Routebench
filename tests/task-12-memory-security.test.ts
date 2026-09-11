@@ -3,10 +3,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  ContextError,
   InMemoryMemoryStore,
   buildContext,
 } from "../packages/agent-memory/src/index.js";
-import { makeMemoryStore, userText } from "./helpers/memory-fixtures.js";
+import {
+  makeMemoryEntry,
+  makeMemoryStore,
+  userText,
+} from "./helpers/memory-fixtures.js";
 
 const pkgRoot = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -173,5 +178,168 @@ describe("task 12 memory security", () => {
         /node:fs/,
       );
     }
+  });
+});
+
+describe("task 12 final fix: memory entry runtime validation", () => {
+  async function expectMemoryRejectedWith(
+    entry: unknown,
+  ): Promise<ContextError> {
+    let caught: unknown;
+    let resolved: unknown;
+    try {
+      resolved = await buildContext({
+        messages: [userText("hi")],
+        memoryEntries: [entry] as never,
+        maxContextBytes: 40_000,
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(resolved).toBeUndefined();
+    expect(caught).toBeInstanceOf(ContextError);
+    expect((caught as ContextError).code).toBe("invalid_context_memory");
+    expect((caught as ContextError).message).toBe("Context memory is invalid.");
+    return caught as ContextError;
+  }
+
+  it("rejects a numeric tag", async () => {
+    await expectMemoryRejectedWith(makeMemoryEntry({ tags: [123 as never] }));
+  });
+
+  it("rejects a boolean tag", async () => {
+    await expectMemoryRejectedWith(makeMemoryEntry({ tags: [true as never] }));
+  });
+
+  it("rejects a null tag", async () => {
+    await expectMemoryRejectedWith(makeMemoryEntry({ tags: [null as never] }));
+  });
+
+  it("rejects an object tag and nested arrays", async () => {
+    await expectMemoryRejectedWith(
+      makeMemoryEntry({ tags: [{ evil: true } as never] }),
+    );
+    await expectMemoryRejectedWith(
+      makeMemoryEntry({ tags: [["nested"] as never] }),
+    );
+  });
+
+  it("rejects an empty-string tag", async () => {
+    await expectMemoryRejectedWith(makeMemoryEntry({ tags: [""] }));
+  });
+
+  it("rejects duplicate tags", async () => {
+    await expectMemoryRejectedWith(makeMemoryEntry({ tags: ["dup", "dup"] }));
+  });
+
+  it("rejects a tag containing a NUL byte", async () => {
+    await expectMemoryRejectedWith(makeMemoryEntry({ tags: ["a\0b"] }));
+  });
+
+  it("rejects a tag exceeding 128 UTF-8 bytes", async () => {
+    await expectMemoryRejectedWith(
+      makeMemoryEntry({ tags: ["t".repeat(129)] }),
+    );
+  });
+
+  it("rejects more than 16 tags on one entry", async () => {
+    await expectMemoryRejectedWith(
+      makeMemoryEntry({
+        tags: Array.from({ length: 17 }, (_, i) => `tag-${String(i)}`),
+      }),
+    );
+  });
+
+  it("rejects an id with illegal characters", async () => {
+    await expectMemoryRejectedWith(makeMemoryEntry({ id: "../evil" }));
+  });
+
+  it("rejects an id longer than 64 characters", async () => {
+    await expectMemoryRejectedWith(makeMemoryEntry({ id: "a".repeat(65) }));
+  });
+
+  it("rejects an illegal scopeId", async () => {
+    await expectMemoryRejectedWith(makeMemoryEntry({ scopeId: "has space" }));
+  });
+
+  it("rejects content exceeding the 16 KiB UTF-8 byte limit", async () => {
+    await expectMemoryRejectedWith(
+      makeMemoryEntry({ content: "x".repeat(16 * 1024 + 1) }),
+    );
+  });
+
+  it("rejects content containing a NUL byte", async () => {
+    await expectMemoryRejectedWith(makeMemoryEntry({ content: "a\0b" }));
+  });
+
+  it("rejects a non-finite createdAt", async () => {
+    await expectMemoryRejectedWith(
+      makeMemoryEntry({ createdAt: Number.NaN }),
+    );
+  });
+
+  it("rejects an infinite updatedAt", async () => {
+    await expectMemoryRejectedWith(
+      makeMemoryEntry({ updatedAt: Number.POSITIVE_INFINITY }),
+    );
+  });
+
+  it("rejects unknown fields such as providerId", async () => {
+    await expectMemoryRejectedWith({
+      ...makeMemoryEntry(),
+      providerId: "anthropic",
+    });
+  });
+
+  it("rejects sensitive fields without echoing their values", async () => {
+    const error = await expectMemoryRejectedWith({
+      ...makeMemoryEntry(),
+      apiKey: "sk-TOP-SECRET-VALUE",
+    });
+    expect(error.message).not.toContain("sk-TOP-SECRET-VALUE");
+  });
+
+  it("does not echo rejected ids, content or tags in the error", async () => {
+    const error = await expectMemoryRejectedWith(
+      makeMemoryEntry({
+        id: "LEAK_MARKER_ID with spaces",
+        content: "LEAK_MARKER_CONTENT https://leak.invalid/path",
+        tags: ["LEAK_MARKER_TAG"],
+      }),
+    );
+    expect(error.message).toBe("Context memory is invalid.");
+    expect(error.message).not.toContain("LEAK_MARKER_ID");
+    expect(error.message).not.toContain("LEAK_MARKER_CONTENT");
+    expect(error.message).not.toContain("LEAK_MARKER_TAG");
+    expect(error.message).not.toContain("leak.invalid");
+  });
+
+  it("still injects a valid memory entry into the context", async () => {
+    const result = await buildContext({
+      messages: [userText("hi")],
+      memoryEntries: [makeMemoryEntry()],
+      maxContextBytes: 10_000,
+    });
+    expect(result.compressed).toBe(false);
+    expect(result.includedMemoryIds).toEqual(["mem-1"]);
+    const text = result.messages[0]?.content
+      .map((c) => (c.type === "text" ? c.text : ""))
+      .join("");
+    expect(text).toContain("[fact] likes TypeScript");
+  });
+
+  it("accepts boundary-sized valid entries", async () => {
+    const entry = makeMemoryEntry({
+      id: "a".repeat(64),
+      content: "x".repeat(16 * 1024),
+      tags: ["t".repeat(128), ...Array.from({ length: 15 }, (_, i) => `tag-${String(i)}`)],
+    });
+    const result = await buildContext({
+      messages: [userText("hi")],
+      memoryEntries: [entry],
+      maxContextBytes: 40_000,
+    });
+    expect(result.compressed).toBe(false);
+    expect(result.includedMemoryIds).toEqual(["a".repeat(64)]);
   });
 });

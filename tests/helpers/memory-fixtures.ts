@@ -47,6 +47,21 @@ export function saveFact(
   return store.save({ scopeId, kind, content, tags });
 }
 
+export function makeMemoryEntry(
+  overrides: Partial<MemoryEntry> = {},
+): MemoryEntry {
+  return {
+    id: "mem-1",
+    scopeId: "scope-a",
+    kind: "fact",
+    content: "likes TypeScript",
+    tags: [],
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+  };
+}
+
 export function scriptedSummarizer(
   text: string,
   options?: {

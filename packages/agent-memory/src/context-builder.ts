@@ -83,12 +83,19 @@ async function runSummarizer(
     failContext("compressionRequired");
   }
 
-  const pending = Promise.resolve(
-    summarizer.summarize(
-      { messages: structuredClone(omitted), omittedMessageCount: omitted.length },
-      signal,
-    ),
-  );
+  // The summarizer call runs synchronously before Promise.resolve() wraps it,
+  // so a synchronous throw must be collapsed here instead of escaping raw.
+  let pending: Promise<string>;
+  try {
+    pending = Promise.resolve(
+      summarizer.summarize(
+        { messages: structuredClone(omitted), omittedMessageCount: omitted.length },
+        signal,
+      ),
+    );
+  } catch {
+    failContext("compressionFailed");
+  }
   // Always consume so a late reject cannot become unhandled.
   pending.then(undefined, () => undefined);
 
