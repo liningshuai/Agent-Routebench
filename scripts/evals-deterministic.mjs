@@ -148,6 +148,22 @@ const required = [
   "tests/task-13-cli-streaming.test.ts",
   "tests/task-13-cli-security.test.ts",
   "tests/task-13-cli-integration.test.ts",
+  "apps/desktop/package.json",
+  "apps/desktop/tsconfig.json",
+  "apps/desktop/src/index.ts",
+  "apps/desktop/src/types.ts",
+  "apps/desktop/src/errors.ts",
+  "apps/desktop/src/controller.ts",
+  "apps/desktop/src/view-model.ts",
+  "docs/desktop.md",
+  "docs/verification/task-14-report.md",
+  "docs/verification/task-14-mutations.md",
+  "tests/helpers/desktop-fixtures.ts",
+  "tests/task-14-desktop-state.test.ts",
+  "tests/task-14-desktop-controller.test.ts",
+  "tests/task-14-desktop-security.test.ts",
+  "tests/task-14-desktop-xss.test.ts",
+  "tests/task-14-desktop-edge-cases.test.ts",
   "tests/helpers/adapter-fixtures.ts",
   "tests/helpers/http-fixtures.ts",
   "tests/helpers/runtime-fixtures.ts",
@@ -308,6 +324,14 @@ runScenario("task 13 node CLI for local agent API", [
   "tests/task-13-cli-integration.test.ts",
 ]);
 
+runScenario("task 14 desktop renderer shell", [
+  "tests/task-14-desktop-state.test.ts",
+  "tests/task-14-desktop-controller.test.ts",
+  "tests/task-14-desktop-security.test.ts",
+  "tests/task-14-desktop-xss.test.ts",
+  "tests/task-14-desktop-edge-cases.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -365,5 +389,16 @@ console.log(
     "complete AbortSignal cancellation. All 131 tests use injected fake fetch and stdio;",
     "integration tests exercise real LocalAgentApiServer instances. No remote network, no",
     "real provider, no persisted credentials.",
+    "Task 14 adds the Desktop Renderer Shell: a Tauri-ready foundation with DesktopController",
+    "state management, DesktopApiClient interface boundary for dependency injection, and a",
+    "security-hardened ViewModel layer. XSS prevention through HTML escaping, credential",
+    "isolation (tool_call.input excluded), provider information isolation, and fixed error",
+    "messages. 91 tests verify state transitions, connection management, session creation,",
+    "turn submission with AbortSignal cancellation, XSS attack vectors, and edge cases.",
+    "TDD Red-Green-Refactor methodology with 9 controlled mutations achieving 77.8% detection",
+    "rate and 100% security boundary coverage. Desktop accesses Local Agent API only through",
+    "the injected interface; it never directly touches model-gateway, provider-registry,",
+    "credential-store, session-persistence, or agent-runtime. No real provider, no network,",
+    "no persisted credentials.",
   ].join(" "),
 );

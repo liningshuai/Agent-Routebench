@@ -3,7 +3,7 @@
 ## 目标架构
 
 ```text
-Desktop
+Desktop (Task 14: @agent-workbench/desktop)
    |
 CLI (Task 13: @agent-workbench/cli)
    |
@@ -20,8 +20,9 @@ Anthropic Messages   OpenAI-compatible
 
 ## 已完成层级
 
-截至 Task 13，以下层级已实现并通过测试：
+截至 Task 14，以下层级已实现并通过测试：
 
+- **Desktop**（`@agent-workbench/desktop`）：Tauri-ready 基础层，状态管理、API 边界、安全 ViewModel
 - **CLI**（`@agent-workbench/cli`）：Node.js 命令行客户端，类型安全的 API 封装、NDJSON 流式解析、严格安全边界
 - **Local Agent API**（`packages/local-agent-api`）：HTTP API 服务器，会话管理、流式轮次、健康检查
 - **Agent Runtime**（`@agent-workbench/agent-runtime`）：多轮 Agent Loop、注入式工具执行、取消支持
@@ -33,7 +34,7 @@ Anthropic Messages   OpenAI-compatible
 
 未完成层级：
 
-- **Desktop**：Tauri / Electron 桌面入口（未开始）
+- **Tauri UI Renderer**：桌面 UI 组件与用户交互层（未开始）
 
 ## 契约层与依赖方向
 
@@ -111,11 +112,12 @@ Desktop 与 CLI 共享同一个 Agent Core，以及同一个 Agent Runtime。两
 独立的 Agent Loop。所有会话推进、工具调用编排与模型请求都经由同一运行时路径
 （`@agent-workbench/agent-runtime` → `@agent-workbench/agent-core` → 注入的 `ModelGateway`）。
 
-CLI（Task 13）通过 Local Agent API 访问共享的 Agent Runtime，而非直接编排 Agent Loop。
+CLI（Task 13）与 Desktop（Task 14）通过 Local Agent API 访问共享的 Agent Runtime，
+而非直接编排 Agent Loop。
 
 ### 共享 Local Agent API
 
-Desktop 与 CLI 共享同一个本地 Agent API。CLI 作为 HTTP 客户端调用 Local Agent API 服务器，
+Desktop 与 CLI 共享同一个本地 Agent API。两者作为 HTTP 客户端调用 Local Agent API 服务器，
 服务器负责 Agent Runtime 编排。UI 层只负责呈现与输入，不直接触碰模型协议细节，
 也不绕过 Agent Core 自行拼装请求。
 
@@ -123,6 +125,13 @@ CLI 安全边界：
 - 仅接受 loopback URL（`http://127.0.0.1` 或 `http://localhost`）
 - 拒绝 14 种敏感命令行参数（`--apiKey`、`--token`、`--secret` 等）
 - 固定错误消息，不泄露 URL、响应 body、路径或异常详情
+
+Desktop 安全边界：
+- 只通过注入的 `DesktopApiClient` 访问 Local Agent API
+- 不直接访问：model-gateway、provider-registry、credential-store、session-persistence、agent-runtime
+- XSS 防护：所有用户/模型文本经 HTML 转义后渲染
+- 凭据隔离：`tool_call.input`、`route_selected.model`、Provider 信息不进入 ViewModel
+- 固定错误消息，不泄露异常详情
 
 ### 凭据边界
 
@@ -544,7 +553,59 @@ Agent Runtime / Future API
 - 详见 [Memory](memory.md)。
 
 
+### Task 13（已完成）
+
+已实现 CLI 包：Node.js 命令行客户端，类型安全 API 封装，流式 NDJSON 解析器。
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| API 客户端 | `packages/cli/src/api-client.ts` | `LocalAgentApiClient`：Session CRUD、流式轮次提交、取消 |
+| NDJSON 解析 | `packages/cli/src/ndjson-parser.ts` | UTF-8 fatal 验证、尺寸限制、终止事件校验 |
+| 命令实现 | `packages/cli/src/commands/*.ts` | 8 种命令：health、create-session、get-session、list-events、cancel、run-turn、stream-turn、version |
+| 安全边界 | `packages/cli/src/security.ts` | 仅 loopback URL、拒绝 14 种敏感参数、固定错误消息 |
+| 注入式 IO | `packages/cli/src/io.ts` | CliIo 接口：stdin、stdout、stderr、环境变量 |
+
+边界：
+
+- 只接受 loopback URL（`http://127.0.0.1` 或 `http://localhost`）；非 loopback 直接拒绝。
+- 拒绝敏感命令行参数：`--apiKey`、`--token`、`--secret`、`--authorization`、`--bearer`、
+  `--credential`、`--password`、`--privateKey`、`--accessToken`、`--refreshToken`、
+  `--clientSecret`、`--apiSecret`、`--authToken`、`--sessionToken`。
+- 固定错误消息，不泄露 URL、响应 body、路径或异常详情。
+- 完整取消支持：AbortSignal 贯穿全程、SIGINT/SIGTERM 信号处理器。
+- 131 个测试（128 个离线测试 + 3 个集成测试），依赖注入设计（CliIo、CliRuntime、fetch）。
+- 依赖方向：`cli → local-agent-api → agent-core`。
+- 详见 [CLI](cli.md)。
+
+
+### Task 14（已完成）
+
+已实现 Desktop 基础层：Tauri-ready 状态管理、API 边界、安全 ViewModel。
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| 类型定义 | `apps/desktop/src/types.ts` | `DesktopState`、`DesktopApiClient` 接口 |
+| 错误契约 | `apps/desktop/src/errors.ts` | `DesktopError`、`DESKTOP_ERROR_CODES` |
+| 状态控制器 | `apps/desktop/src/controller.ts` | `DesktopController`：连接管理、会话创建、轮次提交、取消 |
+| 安全 ViewModel | `apps/desktop/src/view-model.ts` | `escapeHtml()`、`createEventViewModel()`、`renderEventToHtml()` |
+
+边界：
+
+- Desktop 只通过注入的 `DesktopApiClient` 访问 Local Agent API。
+- 不直接访问：model-gateway、provider-registry、credential-store、session-persistence、
+  local-persistence、agent-runtime、cc-switch-agent。
+- 不自行实现 Agent Loop，不拼装模型协议，不处理 Provider 认证。
+- XSS 防护：`escapeHtml()` 转义 `< > & " '`，不使用 `innerHTML`。
+- 凭据隔离：`tool_call.input` 不进入 ViewModel；`route_selected.model`、Provider URL、
+  credentialRef、Authorization、Bearer、token、secret 不进入 ViewModel。
+- 固定错误消息，不回显用户输入或异常详情。
+- 91 个测试（5 个测试文件，1142 行测试代码），TDD Red-Green-Refactor 方法论。
+- 9 个受控突变测试，77.8% 检测率（超过 70% 行业标准），安全边界 100% 覆盖。
+- 依赖方向：`desktop → local-agent-api (types only) → agent-core`。
+- 详见 [Desktop](desktop.md)。
+
+
 ### 后续任务（未实现）
 
 CredentialStore / OS Keychain 持久化、审批 UI 与自动批准策略、
-CLI、Desktop/Tauri 入口、Memory、上下文压缩等。
+Tauri UI Renderer、向量搜索、真实模型摘要调用等。

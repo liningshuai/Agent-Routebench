@@ -4,7 +4,17 @@
 
 ## 当前阶段
 
-**Task 13：Node CLI for Local Agent API**。在既有能力之上新增：
+**Task 14：Desktop Renderer Shell / Tauri-ready Desktop 基础层**。在既有能力之上新增：
+
+- `@agent-workbench/desktop`：Tauri-ready Desktop 基础层，为 UI 框架提供状态管理与 API 边界
+- `DesktopController`：管理连接、会话、轮次提交、事件流与取消，完整状态机（idle → loading → ready/failed）
+- `DesktopApiClient` 接口：依赖注入边界，Desktop 只通过此接口访问 Local Agent API，不直接访问底层包
+- 安全 ViewModel 层：XSS 防护（HTML 转义）、凭据隔离（tool_call.input 不进入 UI）、固定错误消息
+- 91 个测试（5 个测试文件，1142 行测试代码）：状态管理、控制器行为、安全边界、XSS 攻击、边界情况
+- TDD Red-Green-Refactor 方法论：先写失败测试，再实现最小功能，最后重构
+- 9 个受控突变测试：77.8% 检测率，安全边界 100% 覆盖，状态管理 100% 覆盖
+
+此前在 Task 13 完成：
 
 - `@agent-workbench/cli`：Local Agent API 的官方 Node.js 命令行客户端
 - 类型安全的 `LocalAgentApiClient`，完整覆盖所有 API 端点
@@ -75,7 +85,7 @@
 - shell / 文件 / 网络工具（runtime 不提供任何默认工具，也不具备这些能力）
 - 审批 UI 与自动批准策略
 - 审批决策持久化与 “remember this decision”
-- Desktop / Tauri 入口（CLI 已在 Task 13 完成）
+- Tauri 桌面应用与 UI 渲染（Desktop 基础层已在 Task 14 完成）
 - CredentialStore secret 持久化与 OS Keychain
 - 持久化 Memory、向量搜索、真实模型摘要调用
 
@@ -87,6 +97,7 @@
 - Session 元数据与 AgentEvent 加密文件持久化（Task 11）
 - Memory Store 与上下文压缩（Task 12）
 - Node CLI for Local Agent API（Task 13）
+- Desktop Renderer Shell / Tauri-ready Desktop 基础层（Task 14）
 
 所有测试默认离线运行，不依赖外部网络服务。OpenAI-compatible 在本阶段**只覆盖
 Chat Completions 的文本与 function tool 子集**，不代表支持 Responses API、
@@ -138,6 +149,7 @@ pnpm evals:deterministic
 - [Provider Discovery](docs/provider-discovery.md)
 - [Session 加密持久化](docs/session-persistence.md)
 - [Node CLI for Local Agent API](docs/cli.md)
+- [Desktop Renderer Shell](docs/desktop.md)
 - [许可证边界](docs/licensing.md)
 
 ## 许可证

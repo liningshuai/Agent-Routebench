@@ -1,0 +1,12 @@
+{
+  "name": "@agent-workbench/desktop",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@agent-workbench/agent-core": "workspace:*",
+    "@agent-workbench/local-agent-api": "workspace:*"
+  }
+}
