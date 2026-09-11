@@ -495,6 +495,30 @@ AES-256-GCM Envelope 文件
 - 详见 [Session Persistence](session-persistence.md)。
 
 
+### Task 12（已完成）
+
+新增 `@agent-workbench/agent-memory`：进程内 Memory 与确定性上下文压缩。
+
+```text
+Agent Runtime / Future API
+        ↓
+@agent-workbench/agent-memory
+        ├─ InMemoryMemoryStore
+        └─ deterministic Context Builder
+                ↓
+        injected ContextSummarizer
+```
+
+边界：
+
+- Memory 是调用方显式写入的数据，不从消息/工具结果自动提取。
+- 搜索为确定性文本匹配，无向量/Embedding/网络。
+- 上下文按 UTF-8 字节预算压缩；保留 system / 最后 user / tool 原子组。
+- Summarizer 为注入式边界；无 summarizer 时压缩失败而非静默丢弃。
+- 依赖方向：`agent-memory → agent-core`。
+- 详见 [Memory](memory.md)。
+
+
 ### 后续任务（未实现）
 
 CredentialStore / OS Keychain 持久化、审批 UI 与自动批准策略、

@@ -19,6 +19,7 @@
   "devDependencies": {
     "@agent-workbench/agent-contracts": "workspace:*",
     "@agent-workbench/agent-core": "workspace:*",
+    "@agent-workbench/agent-memory": "workspace:*",
     "@agent-workbench/agent-runtime": "workspace:*",
     "@agent-workbench/local-agent-api": "workspace:*",
     "@agent-workbench/local-persistence": "workspace:*",

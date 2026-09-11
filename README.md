@@ -4,12 +4,12 @@
 
 ## 当前阶段
 
-**Task 11：加密本地会话持久化与恢复**。在既有能力之上新增：
+**Task 12：Memory 与上下文压缩**。在既有能力之上新增：
 
-- `@agent-workbench/session-persistence`：AES-256-GCM 加密 Session 文件
-- Session 元数据与 AgentEvent 历史持久化
-- 进程重启后恢复；`running` → `failed` 异常恢复
-- 原子写入 + 失败回滚；key 由调用方注入且不落盘
+- `@agent-workbench/agent-memory`：进程内 Memory Store + 确定性上下文压缩
+- Memory 由调用方显式写入；搜索为确定性文本匹配
+- 上下文按 UTF-8 字节预算压缩；注入式 ContextSummarizer
+- 保留 system / 最后 user / tool 原子组
 
 此前已有：
 
@@ -69,14 +69,15 @@
 - 审批决策持久化与 “remember this decision”
 - CLI、Desktop / Tauri 入口
 - CredentialStore secret 持久化与 OS Keychain
-- Memory、上下文压缩
+- 持久化 Memory、向量搜索、真实模型摘要调用
 
 已在早期任务完成、不再列为缺失的能力：
 
-- Provider 健康检查与模型目录发现（Task 10，`@agent-workbench/provider-discovery`）
-- Local Agent API（Task 9，`@agent-workbench/local-agent-api`）
-- Provider / Route 非敏感配置文件持久化（Task 8，`@agent-workbench/local-persistence`）
-- Session 元数据与 AgentEvent 加密文件持久化（Task 11，`@agent-workbench/session-persistence`）
+- Provider 健康检查与模型目录发现（Task 10）
+- Local Agent API（Task 9）
+- Provider / Route 非敏感配置文件持久化（Task 8）
+- Session 元数据与 AgentEvent 加密文件持久化（Task 11）
+- Memory Store 与上下文压缩（Task 12）
 
 所有测试默认离线运行，不依赖外部网络服务。OpenAI-compatible 在本阶段**只覆盖
 Chat Completions 的文本与 function tool 子集**，不代表支持 Responses API、

@@ -14,6 +14,9 @@ importers:
       '@agent-workbench/agent-core':
         specifier: workspace:*
         version: link:packages/agent-core
+      '@agent-workbench/agent-memory':
+        specifier: workspace:*
+        version: link:packages/agent-memory
       '@agent-workbench/agent-runtime':
         specifier: workspace:*
         version: link:packages/agent-runtime
@@ -52,6 +55,12 @@ importers:
       '@agent-workbench/agent-contracts':
         specifier: workspace:*
         version: link:../agent-contracts
+
+  packages/agent-memory:
+    dependencies:
+      '@agent-workbench/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
 
   packages/agent-runtime:
     dependencies:

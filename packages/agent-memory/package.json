@@ -1,0 +1,14 @@
+{
+  "name": "@agent-workbench/agent-memory",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "In-process memory store and deterministic context compaction",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@agent-workbench/agent-core": "workspace:*"
+  }
+}

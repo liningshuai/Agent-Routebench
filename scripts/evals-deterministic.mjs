@@ -47,6 +47,8 @@ const required = [
   "docs/verification/task-10-report.md",
   "docs/session-persistence.md",
   "docs/verification/task-11-report.md",
+  "docs/memory.md",
+  "docs/verification/task-12-report.md",
   "scripts/verify-layout.mjs",
   "packages/agent-contracts/package.json",
   "packages/agent-contracts/src/contracts.ts",
@@ -121,6 +123,14 @@ const required = [
   "packages/session-persistence/src/validation.ts",
   "packages/session-persistence/src/file-session-store.ts",
   "packages/session-persistence/src/index.ts",
+  "packages/agent-memory/package.json",
+  "packages/agent-memory/tsconfig.json",
+  "packages/agent-memory/src/types.ts",
+  "packages/agent-memory/src/errors.ts",
+  "packages/agent-memory/src/memory-store.ts",
+  "packages/agent-memory/src/context-validation.ts",
+  "packages/agent-memory/src/context-builder.ts",
+  "packages/agent-memory/src/index.ts",
   "tests/helpers/adapter-fixtures.ts",
   "tests/helpers/http-fixtures.ts",
   "tests/helpers/runtime-fixtures.ts",
@@ -166,6 +176,11 @@ const required = [
   "tests/task-11-session-persistence-security.test.ts",
   "tests/task-11-session-persistence-recovery.test.ts",
   "tests/task-11-session-persistence-concurrency.test.ts",
+  "tests/helpers/memory-fixtures.ts",
+  "tests/task-12-memory-store.test.ts",
+  "tests/task-12-context-compaction.test.ts",
+  "tests/task-12-memory-security.test.ts",
+  "tests/task-12-context-cancellation.test.ts",
 ];
 
 for (const path of required) {
@@ -261,6 +276,13 @@ runScenario("task 11 encrypted session persistence", [
   "tests/task-11-session-persistence-concurrency.test.ts",
 ]);
 
+runScenario("task 12 memory and context compaction", [
+  "tests/task-12-memory-store.test.ts",
+  "tests/task-12-context-compaction.test.ts",
+  "tests/task-12-memory-security.test.ts",
+  "tests/task-12-context-cancellation.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -308,5 +330,9 @@ console.log(
     "injected by the caller and never written to disk. Writes are atomic (sibling temp +",
     "rename) with memory rollback on failure. On load, sessions left in 'running' are",
     "recovered to 'failed'. No network access, no CredentialStore, no real provider.",
+    "Task 12 adds in-process memory and deterministic context compaction: a MemoryStore",
+    "with explicit caller-provided entries and deterministic text search, plus a context",
+    "builder that compresses by UTF-8 byte budget using an injected fake summarizer.",
+    "No real model summarization, no persistence, no network, no CredentialStore.",
   ].join(" "),
 );
