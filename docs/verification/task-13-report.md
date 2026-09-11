@@ -6,9 +6,9 @@ Node CLI for Local Agent API: `@agent-workbench/cli`
 
 ## 基线
 
-- Task 13 实现提交: `23359147bc481aa79f74f3685f45599e6a91f0a8`
-- Task 13 实现的父提交: `ded4fc938be0af74f2e54aef286c674338ecfd4d`
-- 收尾修复的父提交: `f5e295d9000029699b66191c4aa4b409b4517609`
+- Task 13 初始实现: `23359147bc481aa79f74f3685f45599e6a91f0a8` (父提交: `ded4fc938be0af74f2e54aef286c674338ecfd4d`)
+- 第一次收尾修复: `f5e295d9000029699b66191c4aa4b409b4517609` (父提交: `23359147bc481aa79f74f3685f45599e6a91f0a8`)
+- 第二次验证收尾: `d88845f97d262489da4c020561ddf6adec57001a` (父提交: `f5e295d9000029699b66191c4aa4b409b4517609`)
 - 分支: `workbench/agent-core`
 - 工作区: 仅 `.superpowers/` 未跟踪
 
@@ -212,9 +212,9 @@ interface CliRuntime {
 ## TDD 过程
 
 ### Red 阶段
-1. 编写 127 个测试用例，覆盖所有命令、边界条件、错误路径
+1. 编写 125 个测试用例，覆盖所有命令、边界条件、错误路径
 2. 创建 stub 实现，全部测试失败
-3. 基线：0/127 passed
+3. 基线：0/125 passed
 
 ### Green 阶段  
 1. 实现 `ndjson.ts` - NDJSON 解析器（192 行）
@@ -227,9 +227,9 @@ interface CliRuntime {
 3. 实现 `cli.ts` - 命令路由（160 行）
 4. 实现 `main.ts` - 入口（61 行）
 5. 修复集成测试：session.id → sessionResponse.session.id
-6. 最终：127/127 passed (100%)
+6. 最终：125/125 passed (100%)
 
-### Mutations 阶段
+### Refactor 阶段
 1. 设计 8 项受控变异
 2. 执行变异，记录检出情况
 3. 初次结果：6/8 检出（75%），2 个测试缺口已记录
@@ -237,11 +237,13 @@ interface CliRuntime {
    - 添加 UTF-8 fatal 验证测试（Mutation 4）
    - 添加 Content-Type 验证测试覆盖所有 POST 端点（Mutation 8）
    - 修改 api-client.ts cancel 方法传递 `{}` 而非 `undefined`
+   - 新增 4 个测试，总计 129 个测试
 5. 中间结果：7/8 检出（87.5%）
-6. **第二次改进（本次验证收尾）**:
+6. **第二次改进（验证收尾提交 d88845f）**:
    - 添加 2 个 session 响应包装解析测试（Mutation 6）
    - createSession unwraps `{ session: {...} }` wrapper
    - getSession unwraps `{ session: {...} }` wrapper
+   - 新增 2 个测试，总计 131 个测试
 7. **最终结果：8/8 检出（100%），131 测试**
 
 ## 验证命令
@@ -303,8 +305,21 @@ fix(cli): close Task 13 delivery and evidence gaps
 10 files changed, 967 insertions(+), 64 deletions(-)
 ```
 
-**第二次验证收尾** (本次提交，待创建):
-- 父提交: `f5e295d9000029699b66191c4aa4b409b4517609`
+**第二次验证收尾**:
+```
+commit d88845f97d262489da4c020561ddf6adec57001a
+Author: liningshuai <3053472115@qq.com>
+Date:   Fri Sep 11 18:12:45 2026 +0800
+
+docs(cli): finalize Task 13 verification evidence
+
+5 files changed, 89 insertions(+), 43 deletions(-)
+```
+
+## 验证结果
+
+Task 13 聚焦测试：**131/131 passed**
+全量测试：**1163/1163 passed** (1032 基线 + 131 Task 13)
 - 修改内容:
   - 新增 2 个 session 包装解析测试
   - 修正文档中测试数量（127→131）
@@ -316,7 +331,7 @@ fix(cli): close Task 13 delivery and evidence gaps
 - ✅ 所有 1163 测试通过（131 Task 13 + 1032 基线）
 - ✅ TypeScript strict 模式编译通过
 - ✅ 8 项受控变异执行完成，8 项检出（100%）
-- ✅ 2 项原未检出变异已通过新增测试完全覆盖
+- ✅ 3 项原未检出变异已通过新增测试完全覆盖（Mutation 4, 6, 8）
 - ✅ 零外部网络访问
 - ✅ 零凭据或 process.env 访问
 - ✅ 固定错误消息，无输入回显
@@ -324,25 +339,17 @@ fix(cli): close Task 13 delivery and evidence gaps
 - ✅ 无 `.superpowers/` 文件提交
 - ✅ 无强制 push 或危险 git 操作
 
-## 验证命令
+## 验证命令参考
+
+最终验证使用项目实际命令（如上节所示）。旧命令仅作历史参考：
 
 ```bash
-# 测试
-npm test                                      # 1157 passed
-npm test tests/task-13-*.test.ts             # 129 passed
-
-# 类型检查
-npm run typecheck                            # 0 errors
-
-# 确定性评估
-npm run evals:deterministic                  # all scenarios passed
-
-# 变异测试
-# 见 docs/verification/task-13-mutations.md
-# 最终检出率: 87.5% (7/8)
+# 历史参考（已废弃）
+npm test                                      # 旧语法
+npm test tests/task-13-*.test.ts             # 旧语法
 
 # Git 验证
-git log --oneline -1                         # 2335914
-git show --stat                              # 20 files changed
-git diff HEAD~1 --name-only | wc -l          # 20
+git log --oneline -3                         # 查看最近 3 次提交
+git show --stat d88845f                      # 查看最终收尾提交
+git diff f5e295d..d88845f --name-only        # 查看本次修改文件
 ```

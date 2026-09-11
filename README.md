@@ -11,7 +11,7 @@
 - 流式 NDJSON 解析器，UTF-8 fatal 验证、尺寸限制、终止事件校验
 - 严格安全边界：仅 loopback URL、拒绝 14 种敏感参数、固定错误消息
 - 8 种命令：`health`、`create-session`、`get-session`、`list-events`、`cancel`、`run-turn`、`stream-turn`、`version`
-- 依赖注入设计（CliIo、CliRuntime、fetch），127 个离线测试 + 3 个集成测试
+- 依赖注入设计（CliIo、CliRuntime、fetch），131 个测试（128 个离线测试 + 3 个集成测试）
 - 完整的取消支持：AbortSignal 贯穿全程、信号处理器（SIGINT/SIGTERM）
 
 此前已有：
