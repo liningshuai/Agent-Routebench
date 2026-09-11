@@ -7,6 +7,7 @@ import type {
   DesktopState,
   DesktopApiClient,
   DesktopConnectionStatus,
+  StateSubscriber,
 } from "./types.js";
 import { createDesktopError } from "./errors.js";
 
@@ -15,6 +16,7 @@ export class DesktopController {
   private apiClient: DesktopApiClient;
   private loadPromise: Promise<void> | null = null;
   private abortControllers = new Map<string, AbortController>();
+  private subscribers: Set<StateSubscriber> = new Set();
 
   constructor(apiClient: DesktopApiClient) {
     this.apiClient = apiClient;
@@ -25,6 +27,7 @@ export class DesktopController {
       events: [],
       draft: "",
       error: null,
+      isSubmitting: false,
     };
   }
 
@@ -36,6 +39,14 @@ export class DesktopController {
       events: [...this.state.events],
       draft: this.state.draft,
       error: this.state.error,
+      isSubmitting: this.state.isSubmitting,
+    };
+  }
+
+  public subscribe(callback: StateSubscriber): () => void {
+    this.subscribers.add(callback);
+    return () => {
+      this.subscribers.delete(callback);
     };
   }
 
@@ -89,6 +100,10 @@ export class DesktopController {
 
     const abortController = new AbortController();
     this.abortControllers.set(sessionId, abortController);
+    
+    // Clear draft and set submitting state
+    const draftText = this.state.draft;
+    this.setState({ isSubmitting: true, draft: "" });
 
     try {
       const events = this.apiClient.submitTurn(
@@ -98,18 +113,36 @@ export class DesktopController {
       );
 
       for await (const event of events) {
+        if (abortController.signal.aborted) {
+          break;
+        }
         this.setState({
           events: [...this.state.events, event],
         });
       }
-    } catch (_err: unknown) {
+      
+      // Check abort after iteration completes
       if (abortController.signal.aborted) {
+        throw new Error("Request aborted.");
+      }
+    } catch (_err: unknown) {
+      const isAborted = abortController.signal.aborted || 
+                       (_err instanceof Error && _err.message === "Request aborted.");
+      
+      if (isAborted) {
+        // Restore draft on cancel and clear isSubmitting in one setState call
+        this.setState({ draft: draftText, isSubmitting: false });
+        this.abortControllers.delete(sessionId);
         throw new Error("Request aborted.");
       }
       this.setState({ error: "Failed to submit turn." });
       throw _err;
     } finally {
       this.abortControllers.delete(sessionId);
+      // Only clear isSubmitting if not already aborted (already cleared in catch block)
+      if (!abortController.signal.aborted) {
+        this.setState({ isSubmitting: false });
+      }
     }
   }
 
@@ -120,9 +153,18 @@ export class DesktopController {
     }
 
     const session = this.state.sessions.find((s) => s.id === sessionId);
-    if (session?.activeTurnId) {
-      await this.apiClient.cancelTurn(sessionId, session.activeTurnId);
+    if (!session) {
+      // No-op for invalid sessionId (Task 14 edge case requirement)
+      return;
     }
+    
+    // Call API when activeTurnId exists OR when abort controller exists (Task 15 UI requirement)
+    if (session.activeTurnId || abortController) {
+      const turnId = session.activeTurnId ?? "current";
+      await this.apiClient.cancelTurn(sessionId, turnId);
+    }
+    
+    // Note: isSubmitting is cleared in submitTurn's catch block when aborted
   }
 
   public updateDraft(draft: string): void {
@@ -138,5 +180,17 @@ export class DesktopController {
       ...this.state,
       ...partial,
     };
+    this.notifySubscribers();
+  }
+
+  private notifySubscribers(): void {
+    const state = this.getState();
+    this.subscribers.forEach((callback) => {
+      try {
+        callback(state);
+      } catch (_err) {
+        // Ignore subscriber errors to prevent breaking the chain
+      }
+    });
   }
 }

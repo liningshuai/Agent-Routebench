@@ -10,6 +10,7 @@ export interface DesktopState {
   readonly events: readonly AgentEvent[];
   readonly draft: string;
   readonly error: string | null;
+  readonly isSubmitting?: boolean;
 }
 
 export interface DesktopApiClient {
@@ -28,3 +29,5 @@ export interface DesktopApiClient {
   ): AsyncIterable<AgentEvent>;
   cancelTurn(sessionId: string, turnId: string): Promise<void>;
 }
+
+export type StateSubscriber = (state: DesktopState) => void;

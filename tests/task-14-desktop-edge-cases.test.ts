@@ -134,7 +134,7 @@ describe("Task 14: Desktop Edge Cases — Cancellation", () => {
     
     await controller.cancelTurn(state.sessions[0].id);
     
-    // Should not throw, just a no-op
+    // Should not call API without activeTurnId (Task 14 requirement)
     expect(client.cancelTurnCalled).toBe(false);
   });
 

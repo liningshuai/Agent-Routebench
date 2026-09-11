@@ -154,7 +154,10 @@ export async function readBodyText(
       }
 
       const value = raced.result.value;
-      if (!(value instanceof Uint8Array)) {
+      if (
+        !(value instanceof Uint8Array) &&
+        Object.prototype.toString.call(value) !== "[object Uint8Array]"
+      ) {
         failDiscovery("providerProtocolError");
       }
       size += value.byteLength;

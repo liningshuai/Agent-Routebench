@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createAgentLoop } from "../packages/agent-runtime/src/index.js";
@@ -19,8 +19,10 @@ import {
 const READ = toolDefinition("read_file");
 const PROBE = "TASK6_SYNTHETIC_PROBE_VALUE";
 
-const PACKAGE_ROOT = fileURLToPath(new URL("../packages/agent-runtime", import.meta.url));
-const APP_ROOT = fileURLToPath(new URL("../", import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const APP_ROOT = dirname(__dirname);
+const PACKAGE_ROOT = join(APP_ROOT, "packages/agent-runtime");
 
 function listFiles(dir: string): string[] {
   const out: string[] = [];

@@ -2,7 +2,9 @@
 
 ## Overview
 
-The `@agent-workbench/desktop` package provides a Tauri-ready Desktop foundation with testable state management, dependency injection, and strict security boundaries for building the Agent Workbench desktop application.
+The `@agent-workbench/desktop` package provides a Tauri-ready Desktop foundation with interactive UI, testable state management, dependency injection, and strict security boundaries for building the Agent Workbench desktop application.
+
+**Current Status:** Interactive UI implemented in Task 15 with 53 tests, building on Task 14 foundation (120 tests).
 
 ## Architecture
 
@@ -30,8 +32,9 @@ class DesktopController {
   constructor(apiClient: DesktopApiClient)
   
   getState(): DesktopState
+  subscribe(callback: (state: Readonly<DesktopState>) => void): () => void
   connect(): Promise<void>
-  newSession(): Promise<void>
+  createSession(): Promise<void>
   submitTurn(sessionId: string, request: LocalAgentTurnRequest): Promise<void>
   cancelTurn(sessionId: string): Promise<void>
   updateDraft(text: string): void
@@ -43,6 +46,11 @@ class DesktopController {
 - `idle` → `loading` → `ready` (successful connection)
 - `idle` → `loading` → `failed` (connection error)
 - Reconnection supported after failure
+
+**Subscription Mechanism:**
+- `subscribe()` registers callbacks invoked on every state change
+- Returns unsubscribe function for cleanup
+- Enables reactive UI rendering
 
 #### DesktopApiClient Interface
 
@@ -127,7 +135,18 @@ Agent Runtime → Model Gateway → Provider Registry → Credential Store
 
 ### Test Coverage
 
-**120 tests across 6 test suites:**
+**173 tests across 13 test suites:**
+
+**Task 15 - Interactive UI (53 tests):**
+- `task-15-desktop-ui-mount.test.ts` (9 tests): Mount function, DOM creation, controller integration
+- `task-15-desktop-ui-connect.test.ts` (9 tests): Connection button, state updates, error handling
+- `task-15-desktop-ui-session.test.ts` (8 tests): Session creation, activation, list rendering
+- `task-15-desktop-ui-draft.test.ts` (5 tests): Draft input, state sync, send button logic
+- `task-15-desktop-ui-xss.test.ts` (8 tests): HTML escaping, script prevention, entity encoding
+- `task-15-desktop-ui-cancel.test.ts` (6 tests): Cancel button, draft restoration, abort handling
+- `task-15-desktop-ui-subscribe.test.ts` (8 tests): Subscription callbacks, unsubscribe, reactive rendering
+
+**Task 14 - Foundation (120 tests):**
 - `task-14-desktop-state.test.ts` (20 tests): State structure and transitions
 - `task-14-desktop-controller.test.ts` (20 tests): Controller behavior
 - `task-14-desktop-security.test.ts` (18 tests): Security boundaries
@@ -137,21 +156,31 @@ Agent Runtime → Model Gateway → Provider Registry → Credential Store
 
 ### TDD Methodology
 
-Task 14 followed strict Red-Green-Refactor:
+Both Task 14 and Task 15 followed strict Red-Green-Refactor:
 1. **Red:** Write failing tests first
 2. **Green:** Implement minimal code to pass
 3. **Refactor:** Improve design while keeping tests green
 
 ### Mutation Testing
 
-10 controlled mutations executed with 80.0% detection rate (8/10 detected):
+**Task 15:** 8 controlled mutations with 100% detection rate (8/8 detected)
+- Draft preservation on cancel: 100% detection
+- Cancel button visibility: 100% detection
+- API invocation: 100% detection
+- Send button logic: 100% detection
+- XSS prevention: 100% detection
+- Subscription mechanism: 100% detection
+- Atomic state updates: 100% detection
+- Abort signal handling: 100% detection
+
+**Task 14:** 10 controlled mutations with 80.0% detection rate (8/10 detected)
 - Security boundaries: 100% detection (4/4 mutations)
 - State management: 100% detection (3/3 mutations)
 - Input validation: 100% detection (1/1 mutation)
 - Resource cleanup: 0% detection (1/1 mutation - minor gap)
 - Error type validation: 0% detection (1/1 mutation - minor gap)
 
-See `docs/verification/task-14-mutations.md` for detailed mutation testing results.
+See `docs/verification/task-15-mutations.md` and `docs/verification/task-14-mutations.md` for detailed results.
 
 ### Test Fixtures
 
@@ -162,6 +191,40 @@ See `docs/verification/task-14-mutations.md` for detailed mutation testing resul
 - No external dependencies
 
 ## Usage Example
+
+### Interactive UI (Task 15)
+
+```typescript
+import { mountDesktopUi } from "@agent-workbench/desktop";
+import { RealDesktopApiClient } from "./real-client";
+
+// Create API client
+const apiClient = new RealDesktopApiClient("http://127.0.0.1:4317");
+
+// Mount interactive UI to DOM container
+const container = document.getElementById("app")!;
+const ui = mountDesktopUi(container, apiClient);
+
+// Subscribe to state changes (optional)
+const unsubscribe = ui.subscribe((state) => {
+  console.log("State updated:", state.connection, state.activeSessionId);
+});
+
+// Cleanup
+// unsubscribe();
+// ui.unmount();
+```
+
+**Interactive Features:**
+- Connect button initiates connection to Local Agent API
+- New Session button creates sessions
+- Draft textarea with real-time state updates
+- Send button (disabled when draft empty, enabled when draft has content)
+- Cancel button during submission (preserves draft on cancel)
+- Streaming event display
+- XSS protection with HTML escaping
+
+### Controller API (Task 14)
 
 ```typescript
 import { DesktopController } from "@agent-workbench/desktop";
@@ -177,12 +240,12 @@ const state = controller.getState();
 console.log(state.connection); // "ready"
 
 // Create session
-await controller.newSession();
+await controller.createSession();
 
 // Submit turn with cancellation support
 const sessionId = controller.getState().activeSessionId!;
 await controller.submitTurn(sessionId, {
-  messages: [{ role: "user", content: "Hello!" }],
+  messages: [{ role: "user", content: [{ type: "text", text: "Hello!" }] }],
 });
 
 // Cancel if needed
@@ -196,24 +259,29 @@ controller.cancelTurn(sessionId);
 Desktop package is designed for Tauri but not yet integrated:
 
 1. **IPC DesktopApiClient:** Implement `DesktopApiClient` using Tauri IPC commands
-2. **Renderer Process:** Use `DesktopController` in Tauri's frontend
-3. **State Binding:** Connect `getState()` to UI framework (React, Vue, Svelte)
-4. **HTML Rendering:** Use `renderEventToHtml()` for event display
+2. **Renderer Process:** Use `mountDesktopUi()` in Tauri's frontend (already interactive)
+3. **Bundle Integration:** Tauri build system consumes compiled ESM output from `dist/`
+4. **Native Features:** File dialogs, system tray, menu bar via Tauri APIs
 
 ### Test Coverage Improvements
 
-From mutation testing:
+From Task 14 mutation testing:
 1. Add test verifying AbortController cleanup after turn completion
 2. Add tests checking `error instanceof DesktopError` and `error.code`
 
-### UI Features
+Task 15 achieved 100% mutation detection rate with no gaps identified.
 
-Desktop package provides state management foundation; UI implementation remains:
-- Message list rendering
-- Draft input
-- Session switcher
-- Error display
-- Progress indicators
+### Build Strategy
+
+**Current (Task 15):** Native ESM with TypeScript compilation
+- TypeScript compiles `src/` → `dist/`
+- Package exports `./dist/index.js`
+- No bundler required (Tauri handles final bundling)
+
+**Future Options:**
+- Add esbuild/rollup for minification and tree-shaking
+- Generate source maps for production debugging
+- Bundle CSS into JS for single-file distribution
 
 ## Dependencies
 
@@ -228,18 +296,29 @@ apps/desktop/
 │   ├── index.ts           # Public exports
 │   ├── types.ts           # DesktopState, DesktopApiClient
 │   ├── errors.ts          # DesktopError, error codes
-│   ├── controller.ts      # DesktopController
+│   ├── controller.ts      # DesktopController with subscription
 │   ├── view-model.ts      # ViewModel, escapeHtml, rendering
-│   └── render.ts          # Pure renderer: renderDesktopPage(state)
+│   ├── render.ts          # Pure renderer: renderDesktopPage(state)
+│   └── ui.ts              # Interactive UI: mountDesktopUi(container, client)
+├── dist/                  # Compiled JavaScript output (ESM)
+│   ├── controller.js
+│   ├── errors.js
+│   ├── index.js
+│   ├── render.js
+│   ├── types.js
+│   ├── ui.js
+│   └── view-model.js
 ├── public/
 │   ├── index.html         # Static Desktop page foundation
 │   └── styles.css         # Complete styling
-├── package.json
-└── tsconfig.json
+├── package.json           # Exports: ./dist/index.js
+└── tsconfig.json          # Build config (noEmit: false)
 ```
 
 ## See Also
 
+- [Task 15 Verification Report](./verification/task-15-report.md)
+- [Task 15 Mutation Testing](./verification/task-15-mutations.md)
 - [Task 14 Verification Report](./verification/task-14-report.md)
-- [Mutation Testing Results](./verification/task-14-mutations.md)
+- [Task 14 Mutation Testing](./verification/task-14-mutations.md)
 - [Local Agent API](./local-agent-api.md)

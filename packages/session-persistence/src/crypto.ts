@@ -19,7 +19,11 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 export function assertEncryptionKey(key: unknown): asserts key is Uint8Array {
-  if (!(key instanceof Uint8Array) || key.byteLength !== KEY_BYTES) {
+  if (
+    (!(key instanceof Uint8Array) &&
+      Object.prototype.toString.call(key) !== "[object Uint8Array]") ||
+    (key as Uint8Array).byteLength !== KEY_BYTES
+  ) {
     failSession("invalidOptions");
   }
 }

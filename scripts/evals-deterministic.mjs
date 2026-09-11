@@ -161,6 +161,8 @@ const required = [
   "docs/desktop.md",
   "docs/verification/task-14-report.md",
   "docs/verification/task-14-mutations.md",
+  "docs/verification/task-15-report.md",
+  "docs/verification/task-15-mutations.md",
   "tests/helpers/desktop-fixtures.ts",
   "tests/task-14-desktop-state.test.ts",
   "tests/task-14-desktop-controller.test.ts",
@@ -168,6 +170,13 @@ const required = [
   "tests/task-14-desktop-xss.test.ts",
   "tests/task-14-desktop-edge-cases.test.ts",
   "tests/task-14-desktop-rendering.test.ts",
+  "tests/task-15-desktop-ui-mount.test.ts",
+  "tests/task-15-desktop-ui-connect.test.ts",
+  "tests/task-15-desktop-ui-session.test.ts",
+  "tests/task-15-desktop-ui-draft.test.ts",
+  "tests/task-15-desktop-ui-xss.test.ts",
+  "tests/task-15-desktop-ui-cancel.test.ts",
+  "tests/task-15-desktop-ui-subscribe.test.ts",
   "tests/helpers/adapter-fixtures.ts",
   "tests/helpers/http-fixtures.ts",
   "tests/helpers/runtime-fixtures.ts",
@@ -335,6 +344,16 @@ runScenario("task 14 desktop renderer shell", [
   "tests/task-14-desktop-xss.test.ts",
   "tests/task-14-desktop-edge-cases.test.ts",
   "tests/task-14-desktop-rendering.test.ts",
+]);
+
+runScenario("task 15 desktop interactive UI", [
+  "tests/task-15-desktop-ui-mount.test.ts",
+  "tests/task-15-desktop-ui-connect.test.ts",
+  "tests/task-15-desktop-ui-session.test.ts",
+  "tests/task-15-desktop-ui-draft.test.ts",
+  "tests/task-15-desktop-ui-xss.test.ts",
+  "tests/task-15-desktop-ui-cancel.test.ts",
+  "tests/task-15-desktop-ui-subscribe.test.ts",
 ]);
 
 console.log(

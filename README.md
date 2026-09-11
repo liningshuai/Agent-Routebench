@@ -4,7 +4,20 @@
 
 ## 当前阶段
 
-**Task 14：Desktop Renderer Shell / Tauri-ready Desktop 基础层**。在既有能力之上新增：
+**Task 15：Desktop Interactive UI**。在 Task 14 基础上新增交互式用户界面：
+
+- 完整交互式 UI：`mountDesktopUi()` 挂载函数，DOM 事件监听，响应式渲染
+- 取消按钮流程：提交期间显示取消按钮，中止 AbortController，恢复草稿文本
+- 草稿保留机制：取消时原子性恢复草稿（draft + isSubmitting 单次 setState）
+- 发送按钮逻辑：草稿为空时禁用，有内容时启用
+- 流式事件展示：实时渲染 `state.events` 数组
+- 订阅机制：`controller.subscribe()` 触发 UI 重新渲染，支持多订阅者
+- 原生 ESM 构建策略：TypeScript 编译到 `dist/`，无需打包器（Tauri 负责打包）
+- 53 个测试（7 个测试文件）：挂载、连接、会话、草稿、XSS、取消、订阅
+- TDD Red-Green-Refactor 方法论：先写失败测试，修复 2 个失败的取消测试，所有测试通过
+- 8 个受控突变测试：100% 检测率（8/8 检出），取消流程、状态管理、XSS 防护全覆盖
+
+**Task 14：Desktop Renderer Shell / Tauri-ready Desktop 基础层**（已完成）：
 
 - `@agent-workbench/desktop`：Tauri-ready Desktop 基础层，为 UI 框架提供状态管理与 API 边界
 - `DesktopController`：管理连接、会话、轮次提交、事件流与取消，完整状态机（idle → loading → ready/failed）

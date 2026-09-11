@@ -3,7 +3,7 @@
 ## 目标架构
 
 ```text
-Desktop (Task 14: @agent-workbench/desktop)
+Desktop (Task 15: Interactive UI, Task 14: @agent-workbench/desktop)
    |
 CLI (Task 13: @agent-workbench/cli)
    |
@@ -20,9 +20,10 @@ Anthropic Messages   OpenAI-compatible
 
 ## 已完成层级
 
-截至 Task 14，以下层级已实现并通过测试：
+截至 Task 15，以下层级已实现并通过测试：
 
-- **Desktop**（`@agent-workbench/desktop`）：Tauri-ready 基础层，状态管理、API 边界、安全 ViewModel
+- **Desktop Interactive UI**（Task 15）：完整交互式用户界面，`mountDesktopUi()`、响应式渲染、取消按钮、草稿保留
+- **Desktop**（Task 14: `@agent-workbench/desktop`）：Tauri-ready 基础层，状态管理、API 边界、安全 ViewModel
 - **CLI**（`@agent-workbench/cli`）：Node.js 命令行客户端，类型安全的 API 封装、NDJSON 流式解析、严格安全边界
 - **Local Agent API**（`packages/local-agent-api`）：HTTP API 服务器，会话管理、流式轮次、健康检查
 - **Agent Runtime**（`@agent-workbench/agent-runtime`）：多轮 Agent Loop、注入式工具执行、取消支持
@@ -34,7 +35,7 @@ Anthropic Messages   OpenAI-compatible
 
 未完成层级：
 
-- **Tauri UI Renderer**：桌面 UI 组件与用户交互层（未开始）
+- **Tauri 集成**：将交互式 UI 集成到 Tauri 应用框架中（基础已就绪）
 
 ## 契约层与依赖方向
 
@@ -132,6 +133,8 @@ Desktop 安全边界：
 - XSS 防护：所有用户/模型文本经 HTML 转义后渲染
 - 凭据隔离：`tool_call.input`、`route_selected.model`、Provider 信息不进入 ViewModel
 - 固定错误消息，不泄露异常详情
+- 响应式渲染：订阅机制触发 UI 自动更新
+- 取消流程：AbortController + 草稿原子性恢复
 
 ### 凭据边界
 

@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { join, relative, sep, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRoutedHttpModelGateway } from "../packages/model-gateway/src/index.js";
@@ -19,7 +19,9 @@ import {
   openaiTextStream,
 } from "./helpers/http-fixtures.js";
 
-const root = fileURLToPath(new URL("../", import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const root = dirname(__dirname);
 
 function listFiles(absoluteDir: string): string[] {
   const out: string[] = [];

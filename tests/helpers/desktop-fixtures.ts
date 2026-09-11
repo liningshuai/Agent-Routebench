@@ -29,8 +29,14 @@ export class FakeDesktopApiClient {
   public cancelTurnCalled = false;
   public cancelledTurns: Array<{ sessionId: string; turnId: string }> = [];
 
+  public loadDelay = 0;
+  public submitTurnDelay = 0;
+
   async load(): Promise<void> {
     this.loadCalled = true;
+    if (this.loadDelay > 0) {
+      await new Promise(resolve => setTimeout(resolve, this.loadDelay));
+    }
     if (this.loadShouldFail) {
       throw new Error(this.loadError);
     }
@@ -63,12 +69,17 @@ export class FakeDesktopApiClient {
       throw new Error("Failed to submit turn.");
     }
 
+    if (this.submitTurnDelay > 0) {
+      await new Promise(resolve => setTimeout(resolve, this.submitTurnDelay));
+      if (signal?.aborted) {
+        throw new Error("Request aborted.");
+      }
+    }
+
     for (const event of this.submitTurnEvents) {
       if (signal?.aborted) {
         throw new Error("Request aborted.");
       }
-      // Add small delay to allow cancellation to happen
-      await new Promise((resolve) => setTimeout(resolve, 5));
       yield event;
     }
   }
