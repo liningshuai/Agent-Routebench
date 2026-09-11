@@ -4,12 +4,12 @@
 
 ## 当前阶段
 
-**Task 10：Provider 健康检查与模型目录发现**。在既有能力之上新增：
+**Task 11：加密本地会话持久化与恢复**。在既有能力之上新增：
 
-- `@agent-workbench/provider-discovery`：受控健康检查 + 模型目录查询
-- Anthropic `/v1/models` 与 OpenAI-compatible `/models`
-- 注入式 HttpClient；只读 Registry 与 CredentialStore
-- 无真实 Provider 调用、无缓存、无重试
+- `@agent-workbench/session-persistence`：AES-256-GCM 加密 Session 文件
+- Session 元数据与 AgentEvent 历史持久化
+- 进程重启后恢复；`running` → `failed` 异常恢复
+- 原子写入 + 失败回滚；key 由调用方注入且不落盘
 
 此前已有：
 

@@ -32,6 +32,9 @@ importers:
       '@agent-workbench/provider-registry':
         specifier: workspace:*
         version: link:packages/provider-registry
+      '@agent-workbench/session-persistence':
+        specifier: workspace:*
+        version: link:packages/session-persistence
       '@types/node':
         specifier: ^24.10.1
         version: 24.13.3
@@ -93,6 +96,15 @@ importers:
         version: link:../provider-registry
 
   packages/provider-registry: {}
+
+  packages/session-persistence:
+    dependencies:
+      '@agent-workbench/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
+      '@agent-workbench/local-agent-api':
+        specifier: workspace:*
+        version: link:../local-agent-api
 
 packages:
 

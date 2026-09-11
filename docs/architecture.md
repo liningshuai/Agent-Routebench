@@ -473,7 +473,29 @@ Anthropic /v1/models  或  OpenAI-compatible /models
 - 详见 [Provider Discovery](provider-discovery.md)。
 
 
+### Task 11（已完成）
+
+新增 `@agent-workbench/session-persistence`：加密本地 Session 持久化。
+
+```text
+Local Agent API (LocalAgentSessionStore)
+        ↓
+FileLocalAgentSessionStore
+        ↓
+AES-256-GCM Envelope 文件
+```
+
+边界：
+
+- 只持久化 Session 元数据与 AgentEvent 历史；不持久化 TurnRequest / ModelRequest / secret。
+- key 由调用方注入（32 字节 Uint8Array），不写入文件、不进日志、不从环境变量读取。
+- 原子写入（sibling temp + rename）+ 失败回滚。
+- 加载时 `running` → `failed`，移除 `activeTurnId`；不恢复执行器 / Promise。
+- 依赖方向：`session-persistence → local-agent-api → agent-core`。
+- 详见 [Session Persistence](session-persistence.md)。
+
+
 ### 后续任务（未实现）
 
 CredentialStore / OS Keychain 持久化、审批 UI 与自动批准策略、
-CLI、Desktop/Tauri 入口、会话持久化、Memory、上下文压缩等。
+CLI、Desktop/Tauri 入口、Memory、上下文压缩等。

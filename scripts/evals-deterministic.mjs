@@ -45,6 +45,8 @@ const required = [
   "docs/verification/task-9-report.md",
   "docs/provider-discovery.md",
   "docs/verification/task-10-report.md",
+  "docs/session-persistence.md",
+  "docs/verification/task-11-report.md",
   "scripts/verify-layout.mjs",
   "packages/agent-contracts/package.json",
   "packages/agent-contracts/src/contracts.ts",
@@ -111,6 +113,14 @@ const required = [
   "packages/provider-discovery/src/parse.ts",
   "packages/provider-discovery/src/discovery.ts",
   "packages/provider-discovery/src/index.ts",
+  "packages/session-persistence/package.json",
+  "packages/session-persistence/tsconfig.json",
+  "packages/session-persistence/src/types.ts",
+  "packages/session-persistence/src/errors.ts",
+  "packages/session-persistence/src/crypto.ts",
+  "packages/session-persistence/src/validation.ts",
+  "packages/session-persistence/src/file-session-store.ts",
+  "packages/session-persistence/src/index.ts",
   "tests/helpers/adapter-fixtures.ts",
   "tests/helpers/http-fixtures.ts",
   "tests/helpers/runtime-fixtures.ts",
@@ -151,6 +161,11 @@ const required = [
   "tests/task-10-provider-discovery-security.test.ts",
   "tests/task-10-provider-discovery-cancellation.test.ts",
   "tests/task-10-provider-discovery-protocol.test.ts",
+  "tests/helpers/session-persistence-fixtures.ts",
+  "tests/task-11-session-persistence.test.ts",
+  "tests/task-11-session-persistence-security.test.ts",
+  "tests/task-11-session-persistence-recovery.test.ts",
+  "tests/task-11-session-persistence-concurrency.test.ts",
 ];
 
 for (const path of required) {
@@ -239,6 +254,13 @@ runScenario("task 10 provider discovery", [
   "tests/task-10-provider-discovery-cancellation.test.ts",
 ]);
 
+runScenario("task 11 encrypted session persistence", [
+  "tests/task-11-session-persistence.test.ts",
+  "tests/task-11-session-persistence-security.test.ts",
+  "tests/task-11-session-persistence-recovery.test.ts",
+  "tests/task-11-session-persistence-concurrency.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -281,5 +303,10 @@ console.log(
     "HttpClient. Credentials are read at most once per call and never written; the",
     "registry is never mutated; no real provider is contacted; no cache, retry or",
     "failover is performed.",
+    "Task 11 adds encrypted local session persistence: LocalAgentSession metadata and",
+    "AgentEvent history are stored in an AES-256-GCM envelope file. The encryption key is",
+    "injected by the caller and never written to disk. Writes are atomic (sibling temp +",
+    "rename) with memory rollback on failure. On load, sessions left in 'running' are",
+    "recovered to 'failed'. No network access, no CredentialStore, no real provider.",
   ].join(" "),
 );
