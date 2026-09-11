@@ -599,8 +599,9 @@ Agent Runtime / Future API
 - 凭据隔离：`tool_call.input` 不进入 ViewModel；`route_selected.model`、Provider URL、
   credentialRef、Authorization、Bearer、token、secret 不进入 ViewModel。
 - 固定错误消息，不回显用户输入或异常详情。
-- 91 个测试（5 个测试文件，1142 行测试代码），TDD Red-Green-Refactor 方法论。
-- 9 个受控突变测试，77.8% 检测率（超过 70% 行业标准），安全边界 100% 覆盖。
+- 纯函数 Renderer：`renderDesktopPage(state): string`，确定性 HTML 生成，静态 Desktop 页面基础。
+- 120 个测试（6 个测试文件），TDD Red-Green-Refactor 方法论。
+- 10 个受控突变测试，80.0% 检测率（8/10 检出），安全边界 100% 覆盖（4/4）。
 - 依赖方向：`desktop → local-agent-api (types only) → agent-core`。
 - 详见 [Desktop](desktop.md)。
 

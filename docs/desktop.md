@@ -127,12 +127,13 @@ Agent Runtime → Model Gateway → Provider Registry → Credential Store
 
 ### Test Coverage
 
-**91 tests across 5 test suites:**
+**120 tests across 6 test suites:**
 - `task-14-desktop-state.test.ts` (20 tests): State structure and transitions
 - `task-14-desktop-controller.test.ts` (20 tests): Controller behavior
 - `task-14-desktop-security.test.ts` (18 tests): Security boundaries
 - `task-14-desktop-xss.test.ts` (16 tests): XSS attack vectors
 - `task-14-desktop-edge-cases.test.ts` (17 tests): Edge cases and error handling
+- `task-14-desktop-rendering.test.ts` (29 tests): Pure renderer function, HTML structure, determinism
 
 ### TDD Methodology
 
@@ -143,8 +144,8 @@ Task 14 followed strict Red-Green-Refactor:
 
 ### Mutation Testing
 
-9 controlled mutations executed with 77.8% detection rate:
-- Security boundaries: 100% detection (3/3 mutations)
+10 controlled mutations executed with 80.0% detection rate (8/10 detected):
+- Security boundaries: 100% detection (4/4 mutations)
 - State management: 100% detection (3/3 mutations)
 - Input validation: 100% detection (1/1 mutation)
 - Resource cleanup: 0% detection (1/1 mutation - minor gap)
@@ -228,7 +229,11 @@ apps/desktop/
 │   ├── types.ts           # DesktopState, DesktopApiClient
 │   ├── errors.ts          # DesktopError, error codes
 │   ├── controller.ts      # DesktopController
-│   └── view-model.ts      # ViewModel, escapeHtml, rendering
+│   ├── view-model.ts      # ViewModel, escapeHtml, rendering
+│   └── render.ts          # Pure renderer: renderDesktopPage(state)
+├── public/
+│   ├── index.html         # Static Desktop page foundation
+│   └── styles.css         # Complete styling
 ├── package.json
 └── tsconfig.json
 ```

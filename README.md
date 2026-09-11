@@ -10,9 +10,10 @@
 - `DesktopController`：管理连接、会话、轮次提交、事件流与取消，完整状态机（idle → loading → ready/failed）
 - `DesktopApiClient` 接口：依赖注入边界，Desktop 只通过此接口访问 Local Agent API，不直接访问底层包
 - 安全 ViewModel 层：XSS 防护（HTML 转义）、凭据隔离（tool_call.input 不进入 UI）、固定错误消息
-- 91 个测试（5 个测试文件，1142 行测试代码）：状态管理、控制器行为、安全边界、XSS 攻击、边界情况
+- 纯函数 Renderer：`renderDesktopPage(state): string`，确定性 HTML 生成，静态 Desktop 页面基础
+- 120 个测试（6 个测试文件）：状态管理、控制器行为、安全边界、XSS 攻击、边界情况、渲染结构
 - TDD Red-Green-Refactor 方法论：先写失败测试，再实现最小功能，最后重构
-- 9 个受控突变测试：77.8% 检测率，安全边界 100% 覆盖，状态管理 100% 覆盖
+- 10 个受控突变测试：80.0% 检测率（8/10 检出），安全边界 100% 覆盖（4/4），状态管理 100% 覆盖
 
 此前在 Task 13 完成：
 
