@@ -16,6 +16,7 @@
     "evals:deterministic": "node scripts/evals-deterministic.mjs",
     "verify:layout": "node scripts/verify-layout.mjs",
     "build:cli": "pnpm --filter @agent-workbench/cli build",
+    "build:desktop": "pnpm --filter @agent-workbench/desktop build",
     "cli": "pnpm --filter @agent-workbench/cli start"
   },
   "devDependencies": {

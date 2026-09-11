@@ -155,6 +155,9 @@ const required = [
   "apps/desktop/src/errors.ts",
   "apps/desktop/src/controller.ts",
   "apps/desktop/src/view-model.ts",
+  "apps/desktop/src/render.ts",
+  "apps/desktop/public/index.html",
+  "apps/desktop/public/styles.css",
   "docs/desktop.md",
   "docs/verification/task-14-report.md",
   "docs/verification/task-14-mutations.md",
@@ -164,6 +167,7 @@ const required = [
   "tests/task-14-desktop-security.test.ts",
   "tests/task-14-desktop-xss.test.ts",
   "tests/task-14-desktop-edge-cases.test.ts",
+  "tests/task-14-desktop-rendering.test.ts",
   "tests/helpers/adapter-fixtures.ts",
   "tests/helpers/http-fixtures.ts",
   "tests/helpers/runtime-fixtures.ts",
@@ -330,6 +334,7 @@ runScenario("task 14 desktop renderer shell", [
   "tests/task-14-desktop-security.test.ts",
   "tests/task-14-desktop-xss.test.ts",
   "tests/task-14-desktop-edge-cases.test.ts",
+  "tests/task-14-desktop-rendering.test.ts",
 ]);
 
 console.log(

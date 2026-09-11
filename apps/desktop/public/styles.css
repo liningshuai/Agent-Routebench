@@ -1,0 +1,282 @@
+/* Agent Workbench Desktop Styles */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #333;
+  background-color: #f5f5f5;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Header */
+.desktop-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background-color: #fff;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.desktop-header h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.connection-status {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.connection-idle {
+  background-color: #f0f0f0;
+  color: #666;
+}
+
+.connection-loading {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.connection-ready {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.connection-failed {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+/* Error Display */
+.desktop-error {
+  padding: 12px 20px;
+  background-color: #f8d7da;
+  color: #721c24;
+  border-bottom: 1px solid #f5c6cb;
+}
+
+/* Main Layout */
+.desktop-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.desktop-sidebar {
+  width: 240px;
+  background-color: #fff;
+  border-right: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+}
+
+.desktop-sidebar h2 {
+  padding: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #666;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.session-list-empty {
+  padding: 16px;
+  color: #999;
+  font-size: 13px;
+  text-align: center;
+}
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.session-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 13px;
+  color: #666;
+}
+
+.session-item:hover {
+  background-color: #f5f5f5;
+}
+
+.session-item.session-active {
+  background-color: #e3f2fd;
+  color: #1976d2;
+  font-weight: 500;
+}
+
+/* Content Area */
+.desktop-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Transcript */
+.desktop-transcript {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background-color: #fafafa;
+}
+
+.transcript-empty {
+  color: #999;
+  font-size: 13px;
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.transcript-events {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.event {
+  padding: 8px 12px;
+  border-radius: 4px;
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+}
+
+.event-text-delta {
+  background-color: #fff;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.event-tool-call {
+  background-color: #f3e5f5;
+  border-color: #ce93d8;
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.event-usage {
+  background-color: #e8f5e9;
+  border-color: #81c784;
+  font-size: 12px;
+  color: #2e7d32;
+}
+
+.event-completed {
+  background-color: #e3f2fd;
+  border-color: #64b5f6;
+  font-size: 12px;
+  color: #1565c0;
+}
+
+.event-error {
+  background-color: #ffebee;
+  border-color: #ef5350;
+  color: #c62828;
+}
+
+.event-route-selected {
+  background-color: #fff9c4;
+  border-color: #fff176;
+  font-size: 12px;
+  color: #f57f17;
+}
+
+.event-unknown {
+  background-color: #eeeeee;
+  border-color: #bdbdbd;
+  font-size: 12px;
+  color: #616161;
+}
+
+/* Composer */
+.desktop-composer {
+  background-color: #fff;
+  border-top: 1px solid #e0e0e0;
+  padding: 16px;
+}
+
+.draft-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.draft-input {
+  min-height: 80px;
+  padding: 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.draft-input:focus {
+  outline: none;
+  border-color: #1976d2;
+}
+
+.draft-controls {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.draft-send,
+.draft-cancel {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.draft-send {
+  background-color: #1976d2;
+  color: #fff;
+}
+
+.draft-send:hover {
+  background-color: #1565c0;
+}
+
+.draft-send:active {
+  background-color: #0d47a1;
+}
+
+.draft-cancel {
+  background-color: #f5f5f5;
+  color: #666;
+}
+
+.draft-cancel:hover {
+  background-color: #e0e0e0;
+}
+
+.draft-cancel:active {
+  background-color: #d0d0d0;
+}

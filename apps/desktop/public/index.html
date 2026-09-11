@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Workbench Desktop</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="desktop-header">
+      <h1>Agent Workbench Desktop</h1>
+      <div class="connection-status connection-idle">idle</div>
+    </header>
+    <div class="desktop-main">
+      <aside class="desktop-sidebar">
+        <h2>Sessions</h2>
+        <div class="session-list-empty">No sessions yet</div>
+      </aside>
+      <main class="desktop-content">
+        <div class="desktop-transcript">
+          <div class="transcript-empty">No events yet</div>
+        </div>
+        <div class="desktop-composer">
+          <div class="draft-container">
+            <textarea class="draft-input" placeholder="Type your message..."></textarea>
+            <div class="draft-controls">
+              <button class="draft-send">Send</button>
+              <button class="draft-cancel">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
