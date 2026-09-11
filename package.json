@@ -14,7 +14,9 @@
     "test:focused": "vitest run --dir tests",
     "security:scan": "node scripts/security-scan.mjs",
     "evals:deterministic": "node scripts/evals-deterministic.mjs",
-    "verify:layout": "node scripts/verify-layout.mjs"
+    "verify:layout": "node scripts/verify-layout.mjs",
+    "build:cli": "pnpm --filter @agent-workbench/cli build",
+    "cli": "pnpm --filter @agent-workbench/cli start"
   },
   "devDependencies": {
     "@agent-workbench/agent-contracts": "workspace:*",

@@ -48,6 +48,22 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@24.13.3)
 
+  apps/cli:
+    dependencies:
+      '@agent-workbench/agent-core':
+        specifier: workspace:*
+        version: link:../../packages/agent-core
+      '@agent-workbench/local-agent-api':
+        specifier: workspace:*
+        version: link:../../packages/local-agent-api
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.13.3
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/agent-contracts: {}
 
   packages/agent-core:
