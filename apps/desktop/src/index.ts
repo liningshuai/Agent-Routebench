@@ -10,3 +10,13 @@ export {
   DESKTOP_ERROR_MESSAGES,
 } from "./errors.js";
 export { DesktopController } from "./controller.js";
+export {
+  mountDesktopUi,
+  type DesktopUi,
+} from "./ui.js";
+export {
+  bootstrapDesktopUi,
+  bootstrapDesktopUiFromDocument,
+  DESKTOP_API_CLIENT_GLOBAL,
+} from "./browser-entry.js";
+export { renderDesktopPage } from "./render.js";

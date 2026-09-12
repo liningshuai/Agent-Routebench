@@ -17,6 +17,7 @@ export class FakeDesktopApiClient {
   public createSessionShouldFail = false;
   public createSessionError = "Failed to create session.";
   public createdSessions: LocalAgentSession[] = [];
+  private nextSessionNumber = 0;
 
   public submitTurnCalled = false;
   public submitTurnRequests: Array<{
@@ -48,7 +49,7 @@ export class FakeDesktopApiClient {
       throw new Error(this.createSessionError);
     }
     const session: LocalAgentSession = {
-      id: `sess_${Date.now()}`,
+      id: `sess_${++this.nextSessionNumber}`,
       status: "idle",
       createdAt: Date.now(),
       updatedAt: Date.now(),

@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, sep, dirname } from "node:path";
+import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import type { ModelStreamEvent } from "../packages/agent-contracts/src/index.js";
@@ -12,12 +12,15 @@ import { createAgentCore } from "../packages/agent-core/src/index.js";
 import {
   createAnthropicMessagesAdapter,
   createOpenAIChatCompletionsAdapter,
+  SseFrameParser,
   type EncodedModelRequest,
   type ProtocolAdapter,
+  type SseEvent,
 } from "../packages/model-gateway/src/index.js";
 import {
   bytes,
   collectEvents,
+  concatBytes,
   createCountingSource,
   createGatedSource,
   fromChunks,
@@ -27,9 +30,7 @@ import {
   toolDefinition,
 } from "./helpers/adapter-fixtures.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const root = dirname(__dirname);
+const root = fileURLToPath(new URL("../", import.meta.url));
 
 const anthropic = createAnthropicMessagesAdapter();
 const openai = createOpenAIChatCompletionsAdapter();
@@ -515,6 +516,374 @@ describe("task 3 integration — cancellation", () => {
         expect(events[0].message).not.toContain("socket exploded");
       }
     }
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Rework: cancellation must also cover frames already inside one chunk
+ * ------------------------------------------------------------------ */
+
+describe("task 3 rework — cancellation inside a single chunk", () => {
+  const ANTHROPIC_TWO_TEXT_FRAMES = [
+    'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":1,"output_tokens":1}}}\n\n',
+    'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
+    'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"first"}}\n\n',
+    'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"second"}}\n\n',
+  ].join("");
+
+  const ANTHROPIC_TOOL_FINAL_FRAME = [
+    'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":2,"output_tokens":1}}}\n\n',
+    'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_ab","name":"read_file","input":{}}}\n\n',
+    'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{}"}}\n\n',
+    'event: content_block_stop\ndata: {"type":"content_block_stop","index":0}\n\n',
+    'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":3}}\n\n',
+    'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+  ].join("");
+
+  const OPENAI_TWO_TEXT_FRAMES = [
+    'data: {"choices":[{"index":0,"delta":{"content":"first"},"finish_reason":null}]}\n\n',
+    'data: {"choices":[{"index":0,"delta":{"content":"second"},"finish_reason":null}]}\n\n',
+  ].join("");
+
+  const OPENAI_TWO_TOOL_FRAME = [
+    'data: {"choices":[{"index":0,"delta":{"content":"start"},"finish_reason":null}]}\n\n',
+    'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"a","type":"function","function":{"name":"alpha"}},{"index":1,"id":"b","type":"function","function":{"name":"beta"}}]},"finish_reason":null}]}\n\n',
+    'data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+  ].join("");
+
+  it("stops an Anthropic chunk at the frame after abort", async () => {
+    const source = createGatedSource();
+    const controller = new AbortController();
+    const iterator = anthropic
+      .decode(source.stream, { signal: controller.signal })
+      [Symbol.asyncIterator]();
+
+    source.push(ANTHROPIC_TWO_TEXT_FRAMES);
+    expect((await nextEvent(iterator)).value).toEqual({
+      type: "text_delta",
+      text: "first",
+    });
+
+    controller.abort();
+
+    expect((await nextEvent(iterator)).value).toEqual(ABORTED);
+    expect((await nextEvent(iterator)).done).toBe(true);
+  });
+
+  it("stops an OpenAI chunk at the frame after abort", async () => {
+    const source = createGatedSource();
+    const controller = new AbortController();
+    const iterator = openai
+      .decode(source.stream, { signal: controller.signal })
+      [Symbol.asyncIterator]();
+
+    source.push(OPENAI_TWO_TEXT_FRAMES);
+    expect((await nextEvent(iterator)).value).toEqual({
+      type: "text_delta",
+      text: "first",
+    });
+
+    controller.abort();
+
+    expect((await nextEvent(iterator)).value).toEqual(ABORTED);
+    expect((await nextEvent(iterator)).done).toBe(true);
+  });
+
+  it("suppresses later events produced by one Anthropic terminal frame", async () => {
+    const source = createGatedSource();
+    const controller = new AbortController();
+    const iterator = anthropic
+      .decode(source.stream, { signal: controller.signal })
+      [Symbol.asyncIterator]();
+
+    source.push(ANTHROPIC_TOOL_FINAL_FRAME);
+
+    // message_stop yields tool_call, usage and completed in one frame.
+    const firstEvent = await nextEvent(iterator);
+    expect(firstEvent.value).toEqual({
+      type: "tool_call",
+      id: "toolu_ab",
+      name: "read_file",
+      input: {},
+    });
+
+    controller.abort();
+
+    const afterAbort = await nextEvent(iterator);
+    expect(afterAbort.value).toEqual(ABORTED);
+    expect((await nextEvent(iterator)).done).toBe(true);
+  });
+
+  it("suppresses later events produced by one OpenAI tool frame", async () => {
+    const source = createGatedSource();
+    const controller = new AbortController();
+    const iterator = openai
+      .decode(source.stream, { signal: controller.signal })
+      [Symbol.asyncIterator]();
+
+    source.push(OPENAI_TWO_TOOL_FRAME);
+
+    expect((await nextEvent(iterator)).value).toEqual({
+      type: "text_delta",
+      text: "start",
+    });
+    expect((await nextEvent(iterator)).value).toEqual({
+      type: "tool_call",
+      id: "a",
+      name: "alpha",
+      input: {},
+    });
+
+    controller.abort();
+
+    const afterAbort = await nextEvent(iterator);
+    expect(afterAbort.value).toEqual(ABORTED);
+    expect((await nextEvent(iterator)).done).toBe(true);
+  });
+
+  it("never emits completed once the signal aborted", async () => {
+    const source = createGatedSource();
+    const controller = new AbortController();
+    const iterator = openai
+      .decode(source.stream, { signal: controller.signal })
+      [Symbol.asyncIterator]();
+
+    source.push(OPENAI_TWO_TOOL_FRAME);
+    await nextEvent(iterator);
+    await nextEvent(iterator);
+
+    controller.abort();
+
+    const rest: ModelStreamEvent[] = [];
+    for (;;) {
+      const step = await nextEvent(iterator);
+      if (step.done === true) {
+        break;
+      }
+      rest.push(step.value);
+    }
+
+    expect(rest).toEqual([ABORTED]);
+    expect(rest.some((event) => event.type === "completed")).toBe(false);
+  });
+
+  it("does not let a hanging upstream return() block cancellation", async () => {
+    let returnCalled = false;
+    const hangingReturn: AsyncIterable<Uint8Array> = {
+      [Symbol.asyncIterator](): AsyncIterator<Uint8Array> {
+        return {
+          next: () => new Promise<IteratorResult<Uint8Array>>(() => {}),
+          return: () => {
+            returnCalled = true;
+            return new Promise<IteratorResult<Uint8Array>>(() => {});
+          },
+        };
+      },
+    };
+
+    const controller = new AbortController();
+    const iterator = anthropic
+      .decode(hangingReturn, { signal: controller.signal })
+      [Symbol.asyncIterator]();
+
+    const first = iterator.next();
+    await tick();
+    controller.abort();
+
+    expect((await first).value).toEqual(ABORTED);
+    expect((await nextEvent(iterator)).done).toBe(true);
+    expect(returnCalled).toBe(true);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * Final fix: the cancellation check must run *before* the frame iterator
+ * is advanced, so garbage that trails a valid frame in the same chunk is
+ * never parsed once the consumer has cancelled.
+ * ------------------------------------------------------------------ */
+
+describe("task 3 final fix — cancellation precedes frame iteration", () => {
+  const ANTHROPIC_LEAD = [
+    'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":1,"output_tokens":1}}}\n\n',
+    'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
+    'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"first"}}\n\n',
+  ].join("");
+
+  const OPENAI_LEAD =
+    'data: {"choices":[{"index":0,"delta":{"content":"first"},"finish_reason":null}]}\n\n';
+
+  const ANTHROPIC_SECOND =
+    'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"second"}}\n\n';
+
+  const OPENAI_SECOND =
+    'data: {"choices":[{"index":0,"delta":{"content":"second"},"finish_reason":null}]}\n\n';
+
+  /** 0xff is not valid UTF-8; the two LFs would otherwise close a frame. */
+  const INVALID_UTF8 = new Uint8Array([0xff, 0x0a, 0x0a]);
+
+  const providers = [
+    { name: "anthropic", adapter: anthropic, lead: ANTHROPIC_LEAD },
+    { name: "openai", adapter: openai, lead: OPENAI_LEAD },
+  ] as const;
+
+  it("aborts instead of parsing trailing invalid bytes in the same chunk", async () => {
+    for (const { name, adapter, lead } of providers) {
+      const source = createGatedSource();
+      const controller = new AbortController();
+      const iterator = adapter
+        .decode(source.stream, { signal: controller.signal })
+        [Symbol.asyncIterator]();
+
+      source.push(concatBytes([bytes(lead), INVALID_UTF8]));
+
+      expect((await nextEvent(iterator)).value, name).toEqual({
+        type: "text_delta",
+        text: "first",
+      });
+
+      controller.abort();
+
+      expect((await nextEvent(iterator)).value, name).toEqual(ABORTED);
+      expect((await nextEvent(iterator)).done, name).toBe(true);
+    }
+  });
+
+  it("aborts instead of parsing an oversized trailing frame in the same chunk", async () => {
+    for (const { name, adapter, lead } of providers) {
+      const source = createGatedSource();
+      const controller = new AbortController();
+      const iterator = adapter
+        .decode(source.stream, {
+          signal: controller.signal,
+          maxFrameBytes: 4096,
+        })
+        [Symbol.asyncIterator]();
+
+      source.push(
+        concatBytes([bytes(lead), bytes(`data: ${"x".repeat(5000)}`)]),
+      );
+
+      expect((await nextEvent(iterator)).value, name).toEqual({
+        type: "text_delta",
+        text: "first",
+      });
+
+      controller.abort();
+
+      expect((await nextEvent(iterator)).value, name).toEqual(ABORTED);
+      expect((await nextEvent(iterator)).done, name).toBe(true);
+    }
+  });
+
+  it("still reports a protocol error for the same chunk when it is not cancelled", async () => {
+    for (const { name, adapter, lead } of providers) {
+      const source = createGatedSource();
+      source.push(concatBytes([bytes(lead), INVALID_UTF8]));
+      source.close();
+
+      const events = await collectEvents(adapter.decode(source.stream));
+
+      expect(events[0], name).toEqual({ type: "text_delta", text: "first" });
+      expect(
+        events.filter((event) => event.type === "error"),
+        name,
+      ).toEqual([
+        {
+          type: "error",
+          code: "provider_protocol_error",
+          message:
+            "The provider stream is outside the supported protocol subset.",
+          retryable: false,
+        },
+      ]);
+      expect(events.some((event) => event.type === "completed"), name).toBe(
+        false,
+      );
+    }
+  });
+
+  it("does not advance the frame iterator again after an abort", async () => {
+    // A *valid* trailing frame is used on purpose: with a malformed tail the
+    // output alone already distinguishes the two behaviours, so only the
+    // spy can prove the iterator was not advanced one frame too far.
+    const cases = [
+      {
+        name: "anthropic",
+        adapter: anthropic,
+        payload: ANTHROPIC_LEAD + ANTHROPIC_SECOND,
+      },
+      {
+        name: "openai",
+        adapter: openai,
+        payload: OPENAI_LEAD + OPENAI_SECOND,
+      },
+    ] as const;
+
+    const original = SseFrameParser.prototype.framesFrom;
+    let advances = 0;
+    const spy = vi
+      .spyOn(SseFrameParser.prototype, "framesFrom")
+      .mockImplementation(function (
+        this: SseFrameParser,
+        chunk: Uint8Array,
+      ): Generator<SseEvent> {
+        const inner = original.call(this, chunk);
+        return (function* () {
+          try {
+            for (;;) {
+              advances += 1;
+              const step = inner.next();
+              if (step.done === true) {
+                return;
+              }
+              yield step.value;
+            }
+          } finally {
+            inner.return?.(undefined);
+          }
+        })();
+      });
+
+    try {
+      for (const { name, adapter, payload } of cases) {
+        advances = 0;
+        const source = createGatedSource();
+        const controller = new AbortController();
+        const iterator = adapter
+          .decode(source.stream, { signal: controller.signal })
+          [Symbol.asyncIterator]();
+
+        source.push(bytes(payload));
+
+        expect((await nextEvent(iterator)).value, name).toEqual({
+          type: "text_delta",
+          text: "first",
+        });
+
+        const advancesBeforeAbort = advances;
+        expect(advancesBeforeAbort, name).toBeGreaterThanOrEqual(1);
+
+        controller.abort();
+
+        expect((await nextEvent(iterator)).value, name).toEqual(ABORTED);
+        expect((await nextEvent(iterator)).done, name).toBe(true);
+
+        // The second frame sits in the same chunk and is syntactically valid,
+        // so only the cancellation check ordering keeps it unparsed.
+        expect(advances, `${name}: advanced the frame iterator`).toBe(
+          advancesBeforeAbort,
+        );
+      }
+    } finally {
+      spy.mockRestore();
+    }
+
+    // The spy is gone: the untouched prototype still frames normally.
+    expect(advances).toBe(1);
+    const parser = new SseFrameParser();
+    expect(parser.push(bytes("data: ok\n\n")).map((frame) => frame.data)).toEqual([
+      "ok",
+    ]);
   });
 });
 

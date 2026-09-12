@@ -122,3 +122,4 @@ describe("Task 15: Desktop UI — Session Interaction", () => {
     expect(sessionItem?.classList.contains("active")).toBe(true);
   });
 });
+// @vitest-environment jsdom

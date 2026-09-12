@@ -1,4 +1,8 @@
-# Task 15 Mutation Testing Results
+# Task 15 Mutation Testing Results (historical baseline)
+
+> These mutation notes belong to the original Task 15 snapshot. The repair
+> added new lifecycle and browser-entry tests, but did not rerun this
+> mutation suite; no new detection rate is claimed here.
 
 ## Overview
 Following TDD Red-Green-Refactor methodology, we execute controlled mutations to verify test suite effectiveness. Each mutation introduces a deliberate defect; a high-quality test suite should detect and fail for each mutation.

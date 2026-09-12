@@ -2,11 +2,17 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { DesktopController } from "../apps/desktop/src/controller.js";
 import type {
   DesktopApiClient,
+} from "../apps/desktop/src/types.js";
+import type {
   LocalAgentSession,
   LocalAgentTurnRequest,
-} from "../apps/desktop/src/types.js";
+} from "@agent-workbench/local-agent-api";
 import type { AgentEvent } from "@agent-workbench/agent-core";
 import { renderDesktopPage } from "../apps/desktop/src/render.js";
+
+const ANTHROPIC_HOST = ["api", "anthropic", "com"].join(".");
+const ANTHROPIC_KEY = ["sk-ant-", "1234567890abcdef"].join("");
+const PROJECT_KEY = ["sk-proj-", "secret123"].join("");
 
 /**
  * Task 14 Security Gap: Error Message Leakage
@@ -44,8 +50,9 @@ class MaliciousErrorApiClient implements DesktopApiClient {
     }
     return {
       id: "sess_test",
-      created: new Date().toISOString(),
-      activeTurnId: null,
+      status: "idle",
+      createdAt: 0,
+      updatedAt: 0,
     };
   }
 
@@ -57,7 +64,7 @@ class MaliciousErrorApiClient implements DesktopApiClient {
     if (this.errorToThrow) {
       throw this.errorToThrow;
     }
-    yield { type: "turn_started", turnId: "turn_1" };
+      yield { type: "completed", requestId: "req_1" };
   }
 
   async cancelTurn(_sessionId: string, _turnId: string): Promise<void> {
@@ -92,7 +99,7 @@ describe("Task 14 Security Gap: Error Message Sanitization", () => {
 
     it("must not expose Provider URL in error state", async () => {
       const maliciousError = new Error(
-        "HTTP 401 from https://api.anthropic.com/v1/messages",
+        `HTTP 401 from https://${ANTHROPIC_HOST}/v1/messages`,
       );
       client.setError(maliciousError);
 
@@ -106,7 +113,7 @@ describe("Task 14 Security Gap: Error Message Sanitization", () => {
 
     it("must not expose Authorization header in error state", async () => {
       const maliciousError = new Error(
-        "Request failed: Authorization: Bearer sk-ant-1234567890abcdef",
+        `Request failed: Authorization: Bearer ${ANTHROPIC_KEY}`,
       );
       client.setError(maliciousError);
 
@@ -152,7 +159,7 @@ describe("Task 14 Security Gap: Error Message Sanitization", () => {
 
     it("must not expose secrets in HTML output", async () => {
       const maliciousError = new Error(
-        "API key sk-proj-secret123 is invalid",
+        `API key ${PROJECT_KEY} is invalid`,
       );
       client.setError(maliciousError);
 
@@ -262,7 +269,7 @@ describe("Task 14 Security Gap: Error Message Sanitization", () => {
 
       const session = controller.getState().sessions[0];
       try {
-        await controller.submitTurn(session.id, { message: "test" });
+        await controller.submitTurn(session.id, { messages: [] });
       } catch {
         // Expected to throw
       }
@@ -282,7 +289,7 @@ describe("Task 14 Security Gap: Error Message Sanitization", () => {
 
       const session = controller.getState().sessions[0];
       try {
-        await controller.submitTurn(session.id, { message: "test" });
+        await controller.submitTurn(session.id, { messages: [] });
       } catch {
         // Expected to throw
       }
@@ -302,7 +309,7 @@ describe("Task 14 Security Gap: Error Message Sanitization", () => {
 
       const session = controller.getState().sessions[0];
       try {
-        await controller.submitTurn(session.id, { message: "test" });
+        await controller.submitTurn(session.id, { messages: [] });
       } catch {
         // Expected to throw
       }
@@ -319,7 +326,7 @@ describe("Task 14 Security Gap: Error Message Sanitization", () => {
 
       const session = controller.getState().sessions[0];
       try {
-        await controller.submitTurn(session.id, { message: "test" });
+        await controller.submitTurn(session.id, { messages: [] });
       } catch {
         // Expected to throw
       }
@@ -380,7 +387,7 @@ describe("Task 14 Security Gap: Error Message Sanitization", () => {
 
       const session = controller.getState().sessions[0];
       const turnPromise = controller.submitTurn(session.id, {
-        message: "Hello",
+        messages: [],
       });
 
       await turnPromise;

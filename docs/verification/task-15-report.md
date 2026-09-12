@@ -1,10 +1,15 @@
-# Task 15 Verification Report: Desktop Interactive UI
+# Task 15 Verification Report: Desktop Interactive UI (historical baseline)
 
-**Status:** ✅ COMPLETE
+> This file records the original Task 15 delivery snapshot. The current
+> repair and its fresh verification are recorded in
+> docs/verification/task-15-final-fix-report.md. Counts and mutation claims
+> in this historical document must not be used as the current status.
+
+**Status:** HISTORICAL — superseded by the final-fix report
 **Date:** 2026-09-11
-**Tests:** 53 passing (7 test files)
+**Tests:** 53 passing (7 test files) in the original snapshot
 **Test Methodology:** TDD Red-Green-Refactor
-**Mutation Testing:** 8 mutations, 100% detection rate
+**Mutation Testing:** original snapshot claim; not rerun as part of the repair
 
 ---
 
@@ -27,7 +32,7 @@
 | Choose and implement build strategy | ✅ | Native ESM with TypeScript compilation to `dist/` |
 | Update documentation | ✅ | This report, mutations.md, README, architecture.md, desktop.md |
 | Run full verification suite | ✅ | All checks passed |
-| Create final Git commit | ✅ | Pending |
+| Create final Git commit | ✅ | Original snapshot commit |
 
 ### ✅ Interactive Features
 

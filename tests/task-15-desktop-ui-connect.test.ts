@@ -107,3 +107,4 @@ describe("Task 15: Desktop UI — Connect Button", () => {
     expect(container.innerHTML).toContain("New Session");
   });
 });
+// @vitest-environment jsdom

@@ -93,3 +93,4 @@ describe("Task 15: Desktop UI — Draft and Send Interaction", () => {
     expect(client.submitTurnCalled).toBe(true);
   });
 });
+// @vitest-environment jsdom

@@ -17,6 +17,7 @@ export class DesktopController {
   private loadPromise: Promise<void> | null = null;
   private abortControllers = new Map<string, AbortController>();
   private subscribers: Set<StateSubscriber> = new Set();
+  private disposed = false;
 
   constructor(apiClient: DesktopApiClient) {
     this.apiClient = apiClient;
@@ -44,6 +45,9 @@ export class DesktopController {
   }
 
   public subscribe(callback: StateSubscriber): () => void {
+    if (this.disposed) {
+      return () => undefined;
+    }
     this.subscribers.add(callback);
     return () => {
       this.subscribers.delete(callback);
@@ -51,6 +55,9 @@ export class DesktopController {
   }
 
   public async connect(): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
     if (this.loadPromise) {
       return this.loadPromise;
     }
@@ -73,6 +80,9 @@ export class DesktopController {
   }
 
   public async newSession(): Promise<void> {
+    if (this.disposed) {
+      throw createDesktopError("NOT_CONNECTED");
+    }
     if (this.state.connection !== "ready") {
       throw createDesktopError("NOT_CONNECTED");
     }
@@ -93,6 +103,9 @@ export class DesktopController {
     sessionId: string,
     request: LocalAgentTurnRequest,
   ): Promise<void> {
+    if (this.disposed) {
+      throw createDesktopError("TURN_FAILED");
+    }
     const session = this.state.sessions.find((s) => s.id === sessionId);
     if (!session) {
       throw createDesktopError("SESSION_NOT_FOUND");
@@ -167,6 +180,25 @@ export class DesktopController {
     // Note: isSubmitting is cleared in submitTurn's catch block when aborted
   }
 
+  public setActiveSession(sessionId: string): void {
+    if (this.disposed) {
+      return;
+    }
+    const session = this.state.sessions.find((item) => item.id === sessionId);
+    if (!session) {
+      throw createDesktopError("SESSION_NOT_FOUND");
+    }
+    if (this.state.isSubmitting || this.state.activeSessionId === sessionId) {
+      return;
+    }
+    this.setState({
+      activeSessionId: sessionId,
+      events: [],
+      draft: "",
+      error: null,
+    });
+  }
+
   public updateDraft(draft: string): void {
     this.setState({ draft });
   }
@@ -176,6 +208,9 @@ export class DesktopController {
   }
 
   private setState(partial: Partial<DesktopState>): void {
+    if (this.disposed) {
+      return;
+    }
     this.state = {
       ...this.state,
       ...partial,
@@ -192,5 +227,17 @@ export class DesktopController {
         // Ignore subscriber errors to prevent breaking the chain
       }
     });
+  }
+
+  public dispose(): void {
+    if (this.disposed) {
+      return;
+    }
+    this.disposed = true;
+    for (const controller of this.abortControllers.values()) {
+      controller.abort();
+    }
+    this.abortControllers.clear();
+    this.subscribers.clear();
   }
 }

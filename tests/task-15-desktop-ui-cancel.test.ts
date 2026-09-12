@@ -53,7 +53,7 @@ describe("Task 15: Desktop UI — Cancel Button", () => {
     const { FakeDesktopApiClient } = await import("./helpers/desktop-fixtures.js");
     const client = new FakeDesktopApiClient();
     client.submitTurnEvents = [
-      { type: "text_delta", text: "response" }
+      { type: "text_delta", requestId: "req_15", text: "response" }
     ];
     mountDesktopUi(container, client);
     await new Promise(r => setTimeout(r, 10));
@@ -227,3 +227,4 @@ describe("Task 15: Desktop UI — Cancel Button", () => {
     expect(finalState.draft).toBe(draftText);
   });
 });
+// @vitest-environment jsdom

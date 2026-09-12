@@ -8,6 +8,7 @@ import {
 } from "../packages/session-persistence/src/index.js";
 import {
   completedEvent,
+  getSafeLoopbackPort,
   makeKey,
   userEvent,
   withTempDir,
@@ -257,9 +258,10 @@ describe("task 11 local agent API integration", () => {
         filePath,
         encryptionKey: key,
       });
+      const portA = await getSafeLoopbackPort();
       const serverA = createLocalAgentApiServer({
         host: "127.0.0.1",
-        port: 0,
+        port: portA,
         runner: {
           async run() {
             return {
@@ -310,9 +312,10 @@ describe("task 11 local agent API integration", () => {
         filePath,
         encryptionKey: key,
       });
+      const configuredPortB = await getSafeLoopbackPort();
       const serverB = createLocalAgentApiServer({
         host: "127.0.0.1",
-        port: 0,
+        port: configuredPortB,
         runner: {
           async run() {
             return {

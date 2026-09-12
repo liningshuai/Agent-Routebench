@@ -43,7 +43,11 @@ describe("Task 15: Desktop UI — XSS Prevention", () => {
     const { FakeDesktopApiClient } = await import("./helpers/desktop-fixtures.js");
     const client = new FakeDesktopApiClient();
     client.submitTurnEvents = [
-      { type: "text_delta", text: "<img src=x onerror=alert(1)>" }
+      {
+        type: "text_delta",
+        requestId: "req_15",
+        text: "<img src=x onerror=alert(1)>",
+      }
     ];
     mountDesktopUi(container, client);
     await new Promise(r => setTimeout(r, 10));
@@ -150,7 +154,11 @@ describe("Task 15: Desktop UI — XSS Prevention", () => {
     const { FakeDesktopApiClient } = await import("./helpers/desktop-fixtures.js");
     const client = new FakeDesktopApiClient();
     client.submitTurnEvents = [
-      { type: "text_delta", text: "javascript:alert(1)" }
+      {
+        type: "text_delta",
+        requestId: "req_15",
+        text: "javascript:alert(1)",
+      }
     ];
     mountDesktopUi(container, client);
     await new Promise(r => setTimeout(r, 10));
@@ -172,3 +180,4 @@ describe("Task 15: Desktop UI — XSS Prevention", () => {
     expect(links.length).toBe(0);
   });
 });
+// @vitest-environment jsdom

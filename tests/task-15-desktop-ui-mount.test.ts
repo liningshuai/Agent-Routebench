@@ -161,3 +161,4 @@ describe("Task 15: Desktop UI — Multiple Instances", () => {
     expect(container2.children.length).toBe(0);
   });
 });
+// @vitest-environment jsdom

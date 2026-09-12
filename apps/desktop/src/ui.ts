@@ -35,8 +35,12 @@ export function mountDesktopUi(
   }
 
   const controller = new DesktopController(client);
+  let unmounted = false;
 
   function render(): void {
+    if (unmounted) {
+      return;
+    }
     const state = controller.getState();
     const html = renderHtml(state);
     container.innerHTML = html;
@@ -44,7 +48,7 @@ export function mountDesktopUi(
   }
 
   // Subscribe to controller state changes
-  controller.subscribe(() => {
+  const unsubscribeController = controller.subscribe(() => {
     render();
   });
 
@@ -167,10 +171,11 @@ export function mountDesktopUi(
     const target = event.currentTarget as HTMLElement;
     const sessionId = target.dataset.sessionId;
     if (sessionId) {
-      // Use controller's public API - need to use setState properly
-      const state = controller.getState();
-      // TODO: Controller needs setActiveSession method or expose setState
-      render();
+      try {
+        controller.setActiveSession(sessionId);
+      } catch (_err: unknown) {
+        // The session was removed between render and click; keep the UI stable.
+      }
     }
   }
 
@@ -212,7 +217,13 @@ export function mountDesktopUi(
 
   return {
     unmount(): void {
-      container.innerHTML = "";
+      if (unmounted) {
+        return;
+      }
+      unmounted = true;
+      unsubscribeController();
+      controller.dispose();
+      container.replaceChildren();
     },
 
     getState(): Readonly<DesktopState> {
@@ -220,6 +231,9 @@ export function mountDesktopUi(
     },
 
     subscribe(callback: (state: Readonly<DesktopState>) => void): () => void {
+      if (unmounted) {
+        return () => undefined;
+      }
       return controller.subscribe(callback);
     },
   };

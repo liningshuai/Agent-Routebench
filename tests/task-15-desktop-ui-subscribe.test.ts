@@ -173,3 +173,4 @@ describe("Task 15: Desktop UI — Subscribe", () => {
     expect(typeof receivedState.newSession).toBe("undefined");
   });
 });
+// @vitest-environment jsdom

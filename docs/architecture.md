@@ -22,7 +22,7 @@ Anthropic Messages   OpenAI-compatible
 
 截至 Task 15，以下层级已实现并通过测试：
 
-- **Desktop Interactive UI**（Task 15）：完整交互式用户界面，`mountDesktopUi()`、响应式渲染、取消按钮、草稿保留
+- **Desktop Interactive UI**（Task 15）：`mountDesktopUi()`、响应式渲染、会话切换、取消按钮、草稿保留、卸载清理与浏览器入口
 - **Desktop**（Task 14: `@agent-workbench/desktop`）：Tauri-ready 基础层，状态管理、API 边界、安全 ViewModel
 - **CLI**（`@agent-workbench/cli`）：Node.js 命令行客户端，类型安全的 API 封装、NDJSON 流式解析、严格安全边界
 - **Local Agent API**（`packages/local-agent-api`）：HTTP API 服务器，会话管理、流式轮次、健康检查
@@ -135,6 +135,8 @@ Desktop 安全边界：
 - 固定错误消息，不泄露异常详情
 - 响应式渲染：订阅机制触发 UI 自动更新
 - 取消流程：AbortController + 草稿原子性恢复
+- 生命周期：卸载时解除内部订阅、终止进行中的请求，并阻止迟到结果重新渲染
+- 浏览器入口：只接受宿主注入的 DesktopApiClient，不自行创建网络客户端
 
 ### 凭据边界
 

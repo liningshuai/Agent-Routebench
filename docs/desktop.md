@@ -4,7 +4,7 @@
 
 The `@agent-workbench/desktop` package provides a Tauri-ready Desktop foundation with interactive UI, testable state management, dependency injection, and strict security boundaries for building the Agent Workbench desktop application.
 
-**Current Status:** Interactive UI implemented in Task 15 with 53 tests, building on Task 14 foundation (120 tests).
+**Current Status:** Interactive UI implemented in Task 15 with 57 focused tests across 9 files, building on the Task 14 foundation and its 139 Desktop tests.
 
 ## Architecture
 
@@ -135,9 +135,9 @@ Agent Runtime → Model Gateway → Provider Registry → Credential Store
 
 ### Test Coverage
 
-**173 tests across 13 test suites:**
+**196 tests across 16 Desktop test suites:**
 
-**Task 15 - Interactive UI (53 tests):**
+**Task 15 - Interactive UI (57 tests):**
 - `task-15-desktop-ui-mount.test.ts` (9 tests): Mount function, DOM creation, controller integration
 - `task-15-desktop-ui-connect.test.ts` (9 tests): Connection button, state updates, error handling
 - `task-15-desktop-ui-session.test.ts` (8 tests): Session creation, activation, list rendering
@@ -145,6 +145,8 @@ Agent Runtime → Model Gateway → Provider Registry → Credential Store
 - `task-15-desktop-ui-xss.test.ts` (8 tests): HTML escaping, script prevention, entity encoding
 - `task-15-desktop-ui-cancel.test.ts` (6 tests): Cancel button, draft restoration, abort handling
 - `task-15-desktop-ui-subscribe.test.ts` (8 tests): Subscription callbacks, unsubscribe, reactive rendering
+- `task-15-desktop-ui-lifecycle.test.ts` (2 tests): Session switching and late-render prevention after unmount
+- `task-15-desktop-ui-entry.test.ts` (2 tests): Browser entry script and injected client bootstrap
 
 **Task 14 - Foundation (120 tests):**
 - `task-14-desktop-state.test.ts` (20 tests): State structure and transitions
@@ -153,6 +155,7 @@ Agent Runtime → Model Gateway → Provider Registry → Credential Store
 - `task-14-desktop-xss.test.ts` (16 tests): XSS attack vectors
 - `task-14-desktop-edge-cases.test.ts` (17 tests): Edge cases and error handling
 - `task-14-desktop-rendering.test.ts` (29 tests): Pure renderer function, HTML structure, determinism
+- Task 14 error-sanitization closeout adds 19 tests in `task-14-desktop-error-sanitization.test.ts`.
 
 ### TDD Methodology
 
@@ -163,15 +166,9 @@ Both Task 14 and Task 15 followed strict Red-Green-Refactor:
 
 ### Mutation Testing
 
-**Task 15:** 8 controlled mutations with 100% detection rate (8/8 detected)
-- Draft preservation on cancel: 100% detection
-- Cancel button visibility: 100% detection
-- API invocation: 100% detection
-- Send button logic: 100% detection
-- XSS prevention: 100% detection
-- Subscription mechanism: 100% detection
-- Atomic state updates: 100% detection
-- Abort signal handling: 100% detection
+**Task 15:** The original mutation notes are retained as historical evidence.
+The repair added session/lifecycle/browser-entry regression tests; this repair
+did not rerun the historical mutation suite, so no new detection rate is claimed.
 
 **Task 14:** 10 controlled mutations with 80.0% detection rate (8/10 detected)
 - Security boundaries: 100% detection (4/4 mutations)
@@ -196,10 +193,10 @@ See `docs/verification/task-15-mutations.md` and `docs/verification/task-14-muta
 
 ```typescript
 import { mountDesktopUi } from "@agent-workbench/desktop";
-import { RealDesktopApiClient } from "./real-client";
+import type { DesktopApiClient } from "@agent-workbench/desktop";
 
-// Create API client
-const apiClient = new RealDesktopApiClient("http://127.0.0.1:4317");
+// The host supplies this bridge. The renderer does not create a network client.
+declare const apiClient: DesktopApiClient;
 
 // Mount interactive UI to DOM container
 const container = document.getElementById("app")!;
@@ -210,10 +207,20 @@ const unsubscribe = ui.subscribe((state) => {
   console.log("State updated:", state.connection, state.activeSessionId);
 });
 
-// Cleanup
-// unsubscribe();
-// ui.unmount();
+// Cleanup: unmount also unsubscribes the internal renderer and aborts an
+// in-flight submission. Late API results cannot repopulate the container.
+unsubscribe();
+ui.unmount();
 ```
+
+### Browser entry
+
+`public/index.html` loads the compiled `dist/browser-entry.js`. A Tauri host
+or another local shell must inject a `DesktopApiClient` on
+`globalThis.__AGENT_WORKBENCH_DESKTOP_API_CLIENT__` before the module loads.
+The entry performs no network access and does nothing when the host has not
+provided a valid bridge. Tests can use `bootstrapDesktopUi(container, client)`
+directly.
 
 **Interactive Features:**
 - Connect button initiates connection to Local Agent API
@@ -269,7 +276,10 @@ From Task 14 mutation testing:
 1. Add test verifying AbortController cleanup after turn completion
 2. Add tests checking `error instanceof DesktopError` and `error.code`
 
-Task 15 achieved 100% mutation detection rate with no gaps identified.
+Task 15's original mutation notes are historical evidence. The repair added
+focused regression coverage for session switching, browser bootstrapping and
+late-render prevention; mutation results are not reported as rerun unless the
+controlled mutation has actually been executed.
 
 ### Build Strategy
 
@@ -299,7 +309,8 @@ apps/desktop/
 │   ├── controller.ts      # DesktopController with subscription
 │   ├── view-model.ts      # ViewModel, escapeHtml, rendering
 │   ├── render.ts          # Pure renderer: renderDesktopPage(state)
-│   └── ui.ts              # Interactive UI: mountDesktopUi(container, client)
+│   ├── ui.ts              # Interactive UI: mountDesktopUi(container, client)
+│   └── browser-entry.ts   # Host-injected browser bootstrap
 ├── dist/                  # Compiled JavaScript output (ESM)
 │   ├── controller.js
 │   ├── errors.js
@@ -307,6 +318,7 @@ apps/desktop/
 │   ├── render.js
 │   ├── types.js
 │   ├── ui.js
+│   ├── browser-entry.js
 │   └── view-model.js
 ├── public/
 │   ├── index.html         # Static Desktop page foundation
