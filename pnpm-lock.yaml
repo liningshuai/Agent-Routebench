@@ -108,6 +108,27 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  packages/agent-backend:
+    dependencies:
+      '@agent-workbench/agent-contracts':
+        specifier: workspace:*
+        version: link:../agent-contracts
+      '@agent-workbench/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
+      '@agent-workbench/agent-runtime':
+        specifier: workspace:*
+        version: link:../agent-runtime
+      '@agent-workbench/local-agent-api':
+        specifier: workspace:*
+        version: link:../local-agent-api
+      '@agent-workbench/model-gateway':
+        specifier: workspace:*
+        version: link:../model-gateway
+      '@agent-workbench/provider-registry':
+        specifier: workspace:*
+        version: link:../provider-registry
+
   packages/agent-contracts: {}
 
   packages/agent-core:

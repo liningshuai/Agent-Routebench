@@ -749,3 +749,22 @@ Task 19 在 Task 18 的原生壳层内建立可注入、可测试、可替换的
 - 仍然没有真实 Agent Backend / 真实模型调用 / Provider 接入；Task 21 才负责完整组装。
 - 同时修正了 `docs/tauri.md` 中 Task 19 的旧 `Result<serde_json::Value, HostError>`
   描述（现为 typed response 表述）。
+
+### Task 21（已完成：组装可运行的 Agent Backend）
+
+新增 workspace 包 `@agent-workbench/agent-backend`：
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| 组装 | `packages/agent-backend/src/backend.ts` | Gateway + AgentLoop + GovernedToolExecutor → LocalAgentRunner；构造期零凭据读取、零 HTTP |
+| 请求转换 | `src/request.ts` | `turnId → requestId`；routeId/model 必填；maxTokens 默认值；防御性复制 |
+| 事件映射 | `src/events.ts` | AgentLoopEvent → AgentEvent；中间 completed 暂存至 loop_completed；error 终止；上游及时释放 |
+| 错误契约 | `src/errors.ts` | 固定 `invalid_options` / `invalid_request`，消息静态 |
+
+边界：
+
+- 默认 Host Runner 仍为 `NotReadyLocalAgentRunner`；Backend 仅经显式注入启用。
+- Task 9 最小修正：流式终止 `error` 后 Session 标为 `failed`（`aborted` → `cancelled`），
+  不再一律 `completed`；端点、NDJSON、错误文案与并发约束不变。
+- 无第三方运行时依赖；生产源码无 fetch/node:http/node:fs/process.env/子进程。
+- Task 21 只完成 Node/TypeScript 组装；Tauri Rust 宿主与该 Backend 的跨进程连接属于后续任务。

@@ -163,13 +163,15 @@ describe("Task 20: current-state documentation", () => {
     );
     const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 
+    // Documentation-currency lock, updated at the Task 21 checkpoint: the
+    // historical Task 19 checkpoint wording stays, the current state now
+    // reflects the completed Node-side backend assembly.
     expect(tauriDocumentation).not.toContain("Task 20 and Task 21 have not been started.");
     expect(tauriDocumentation).toContain("Task 20 is now complete");
-    expect(tauriDocumentation).toContain("Task 21 has not been started");
+    expect(tauriDocumentation).toContain("Task 21 has assembled the Node backend");
     expect(deterministicEvaluation).not.toContain("Task 20 and Task 21 have not been started.");
-    expect(deterministicEvaluation).toContain("Task 20 is complete");
-    expect(deterministicEvaluation).toContain("Task 21 has not been started");
+    expect(deterministicEvaluation).toContain("Task 20 is complete; Task 21 has assembled the Node backend.");
     expect(readme).toContain("在 Task 19 检查点 Task 20/21 尚未开始");
-    expect(readme).toContain("当前 Task 20 已完成，Task 21 待开始");
+    expect(readme).toContain("Task 21 已完成 Node 侧 Backend 组装");
   });
 });

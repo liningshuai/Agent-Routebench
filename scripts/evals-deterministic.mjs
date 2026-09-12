@@ -487,6 +487,14 @@ runScenario("task 20 loopback local agent host entry and lifecycle", [
   "docs/verification/task-20-report.md",
 ]);
 
+runScenario("task 21 assembled agent backend over the local agent api", [
+  "tests/task-21-agent-backend.test.ts",
+  "tests/task-21-agent-backend-streaming.test.ts",
+  "tests/task-21-agent-backend-security.test.ts",
+  "tests/task-21-agent-backend-integration.test.ts",
+  "tests/task-21-agent-backend-cancellation.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -576,6 +584,13 @@ console.log(
     "fixed host_not_ready error; no real backend, provider, model call, credential store or",
     "network exists yet. Cargo build output is pinned to the repository root target/ through",
     ".cargo/config.toml, so apps/desktop/src-tauri/target never reappears and the security",
-    "scan stays reproducible. Task 20 is complete; Task 21 has not been started.",
+    "scan stays reproducible. Task 20 is complete; Task 21 has assembled the Node backend.",
+    "Task 20 adds the loopback Node host entry with lifecycle",
+    "management and a not-ready default runner. Task 21 assembles the existing registry,",
+    "credential store, resilient gateway and agent runtime into a runnable LocalAgentRunner,",
+    "maps loop events onto the Local Agent API event contract with deferred terminal",
+    "completed events, and fixes terminal error session status. All provider HTTP stays",
+    "behind the injected fake client in offline scenarios; no real provider, credential,",
+    "model call or network access exists.",
   ].join(" "),
 );

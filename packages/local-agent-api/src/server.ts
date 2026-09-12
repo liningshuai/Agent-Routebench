@@ -371,6 +371,9 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
     });
 
     let sawTerminal = false;
+    // The last terminal event decides the session's final status: a streamed
+    // terminal `error` must not be reported as `completed`.
+    let lastTerminalEvent: AgentEvent | undefined;
     let stream: AsyncIterable<AgentEvent> | undefined;
     let iterator: AsyncIterator<AgentEvent> | undefined;
 
@@ -382,6 +385,7 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
       writeNdjsonLine(res, event);
       if (event.type === "completed" || event.type === "error") {
         sawTerminal = true;
+        lastTerminalEvent = event;
       }
     };
 
@@ -467,6 +471,13 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
         emit(raced.result.value);
       }
 
+      if (lastTerminalEvent?.type === "error") {
+        // A terminal error event decides the final status: aborted errors
+        // mean the turn was cancelled, everything else failed.
+        finish(lastTerminalEvent.code === "aborted" ? "cancelled" : "failed");
+        await this.#release(iterator);
+        return;
+      }
       finish("completed");
       await this.#release(iterator);
     } catch {

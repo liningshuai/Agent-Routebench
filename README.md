@@ -4,7 +4,17 @@
 
 ## 当前阶段
 
-**Task 20：Loopback Local Agent API Host 入口与生命周期**。新增独立 workspace app
+**Task 21：组装可运行的 Agent Backend（Node 侧）**。新增 workspace 包 `@agent-workbench/agent-backend`，把既有抽象组装成可运行的 `LocalAgentRunner`：
+
+- 组装链：ProviderRegistry + CredentialStore + 注入 HttpClient → ResilientRoutedHttpModelGateway → createAgentLoop()（可选 createGovernedToolExecutor() fail-closed 闸门）→ LocalAgentRunner；不重新实现任何协议解析、重试、故障转移或多轮逻辑
+- 请求转换：turnId 直接作为 requestId；routeId/model 必填（缺失即固定 invalid_request 事件，不自动选择、不触碰凭据）；maxTokens 缺省用 defaultMaxTokens；messages/tools 防御性复制
+- 事件映射：turn_started/tool_execution_* 不外泄；Runtime 中间轮 completed 暂存，loop_completed 时输出唯一最终 completed；error 终止且不再补发 completed；流式增量，上游迭代器及时释放
+- 显式注入启用：默认 Host Runner 仍是 NotReadyLocalAgentRunner，不自动读配置/凭据；经 createLocalAgentHost({ runner }) 注入后本机 loopback 全链路可运行
+- Task 9 最小修正：流式终止 error 后 Session 不再标成 completed——aborted → cancelled、其他 → failed（含真实回归测试）
+- 无第三方运行时依赖、无 fetch/node:http/node:fs/process.env/子进程；凭据只在 Gateway 单次认证头内短暂出现
+- 未实现：真实 Provider E2E、真实 API Key 验证、Tauri Rust 宿主与 Backend 的跨进程连接、Memory/Session Persistence 集成
+
+**Task 20：Loopback Local Agent API Host 入口与生命周期**。新增独立 workspace app `@agent-workbench/local-agent-host`，复用 Task 9 服务器实现提供仅回环的 Local Agent API 宿主：Loopback Local Agent API Host 入口与生命周期**。新增独立 workspace app
 `@agent-workbench/local-agent-host`，复用 Task 9 服务器实现提供仅回环的 Local Agent API 宿主：
 
 - 参数校验：host 仅允许 `127.0.0.1` / `localhost`，port 必须是 1–65535 整数；错误固定、不回显输入
@@ -23,7 +33,7 @@
 - 委托顺序固定：接收参数 → 校验（敏感字段 → 未知字段 → 结构）→ 失败立即返回固定错误（不触碰 Backend）→ 校验通过才委托 `runtime.backend()`；`agent_health` 不接收 State、不读取 Backend
 - Cargo 构建输出经 `.cargo/config.toml` 固化到仓库根 `target/`（git 忽略、在安全扫描根之外）：`src-tauri/target` 不再出现，安全扫描在有构建产物的状态下可复现通过；native build 不依赖 shell 临时 `CARGO_TARGET_DIR`
 - `build:desktop` 增加 cross-process 锁、staging 原子交换与输入指纹跳过，并行调用安全
-- 仍然没有：真实 Backend、Provider、模型调用、CredentialStore、Local Agent API Server、Node 子进程、安装包、托盘、远程网络、真实 `agent_turn_event` 发布；在 Task 19 检查点 Task 20/21 尚未开始，当前 Task 20 已完成，Task 21 待开始
+- 仍然没有：真实 Backend、Provider、模型调用、CredentialStore、Local Agent API Server、Node 子进程、安装包、托盘、远程网络、真实 `agent_turn_event` 发布；在 Task 19 检查点 Task 20/21 尚未开始，当前 Task 20 已完成，Task 21 已完成 Node 侧 Backend 组装
 
 **Task 18：Tauri Native Desktop Shell and Host IPC MVP**。在 Task 17 的 TypeScript IPC bridge 基础上，加入真实的 Tauri 2 原生宿主基础层：
 
@@ -225,6 +235,8 @@ pnpm evals:deterministic
 - [Node CLI for Local Agent API](docs/cli.md)
 - [共享 Local Agent API Client](docs/local-agent-client.md)
 - [Desktop Renderer Shell](docs/desktop.md)
+- [Agent Backend](docs/agent-backend.md)
+- [Local Agent Host](docs/local-agent-host.md)
 - [许可证边界](docs/licensing.md)
 
 ## 许可证

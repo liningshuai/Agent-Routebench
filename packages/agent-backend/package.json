@@ -1,0 +1,22 @@
+{
+  "name": "@agent-workbench/agent-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Assembly of registry, credentials, gateway and agent loop into a LocalAgentRunner",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@agent-workbench/agent-contracts": "workspace:*",
+    "@agent-workbench/agent-core": "workspace:*",
+    "@agent-workbench/agent-runtime": "workspace:*",
+    "@agent-workbench/local-agent-api": "workspace:*",
+    "@agent-workbench/model-gateway": "workspace:*",
+    "@agent-workbench/provider-registry": "workspace:*"
+  }
+}
