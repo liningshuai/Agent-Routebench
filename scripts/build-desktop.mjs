@@ -15,21 +15,28 @@
 // is exposed to the webview.
 
 import { execSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const desktopDir = join(repoRoot, "apps/desktop");
 const distDir = join(desktopDir, "dist");
+// The build writes into a staging directory and swaps it into place at the
+// very end, so concurrent readers (for example a Tauri build embedding
+// frontendDist) never observe a missing or half-written dist directory.
+const stagingDir = join(desktopDir, "dist-staging");
 const publicDir = join(desktopDir, "public");
 const tauriApiDir = join(desktopDir, "node_modules/@tauri-apps/api");
 
@@ -115,26 +122,26 @@ function assertCleanSlate() {
 
 function compileDesktop() {
   console.log("build:desktop compiling renderer");
-  run("corepack pnpm exec tsc -p tsconfig.json", desktopDir);
+  run("corepack pnpm exec tsc -p tsconfig.json --outDir dist-staging", desktopDir);
 }
 
 function compileVendorPackages() {
   console.log("build:desktop compiling vendor runtime packages");
-  const rawOut = join(distDir, VENDOR_DIR, "raw");
+  const rawOut = join(stagingDir, VENDOR_DIR, "raw");
   const entries = [
     "packages/local-agent-client/src/index.ts",
     "packages/agent-core/src/index.ts",
     "packages/agent-contracts/src/index.ts",
   ].join(" ");
   run(
-    `corepack pnpm exec tsc ${entries} --outDir "apps/desktop/dist/vendor/raw" ` +
+    `corepack pnpm exec tsc ${entries} --outDir "apps/desktop/dist-staging/vendor/raw" ` +
       "--target es2022 --module nodenext --moduleResolution nodenext " +
       "--strict --skipLibCheck --esModuleInterop",
     repoRoot,
   );
   for (const name of ["agent-core", "agent-contracts", "local-agent-client"]) {
     const from = join(rawOut, name, "src");
-    const to = join(distDir, "vendor", "@agent-workbench", name);
+    const to = join(stagingDir, "vendor", "@agent-workbench", name);
     if (!existsSync(from)) {
       throw new Error(`vendor compilation did not emit ${name}`);
     }
@@ -146,7 +153,7 @@ function compileVendorPackages() {
 
 function vendorTauriApi() {
   console.log("build:desktop vendoring official @tauri-apps/api runtime");
-  const target = join(distDir, "vendor", "@tauri-apps", "api");
+  const target = join(stagingDir, "vendor", "@tauri-apps", "api");
   mkdirSync(target, { recursive: true });
   for (const file of TAURI_API_FILES) {
     const from = join(tauriApiDir, file);
@@ -160,12 +167,12 @@ function vendorTauriApi() {
 }
 
 function rewriteBareImports() {
-  const jsFiles = listFiles(distDir).filter((file) => file.endsWith(".js"));
+  const jsFiles = listFiles(stagingDir).filter((file) => file.endsWith(".js"));
   for (const file of jsFiles) {
     let source = readFileSync(file, "utf8");
     let changed = false;
     for (const [specifier, target] of VENDOR_MAP) {
-      const importPath = toImportPath(dirname(file), join(distDir, target));
+      const importPath = toImportPath(dirname(file), join(stagingDir, target));
       const escaped = specifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const pattern = new RegExp(`(\\bfrom\\s*|\\bimport\\s*\\(\\s*)("|')${escaped}\\2`, "g");
       const replacement = `$1$2${importPath}$2`;
@@ -183,7 +190,7 @@ function rewriteBareImports() {
 
 function assertNoBareImportsRemain() {
   const offenders = [];
-  for (const file of listFiles(distDir)) {
+  for (const file of listFiles(stagingDir)) {
     if (!file.endsWith(".js")) continue;
     const source = readFileSync(file, "utf8");
     for (const line of source.split(/\r?\n/)) {
@@ -227,28 +234,135 @@ function writeIndexHtml() {
 </body>
 </html>
 `;
-  writeFileSync(join(distDir, "index.html"), html);
+  writeFileSync(join(stagingDir, "index.html"), html);
 }
 
 function copyStaticAssets() {
-  const target = join(distDir, "styles.css");
+  const target = join(stagingDir, "styles.css");
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, readFileSync(join(publicDir, "styles.css")));
 }
 
+/**
+ * Cross-process build lock, held in the OS temp directory keyed by the
+ * repository path so concurrent `build:desktop` invocations serialize and
+ * never race on the shared dist output.
+ */
+function lockDirPath() {
+  const key = Buffer.from(repoRoot).toString("base64url").slice(0, 40);
+  return join(tmpdir(), `agent-routebench-desktop-build-${key}`);
+}
+
+function sleepSync(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+const LOCK_TIMEOUT_MS = 5 * 60 * 1000;
+const STALE_LOCK_MS = 10 * 60 * 1000;
+
+function acquireBuildLock() {
+  const lockDir = lockDirPath();
+  const started = Date.now();
+  for (;;) {
+    try {
+      mkdirSync(lockDir);
+      return;
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
+    try {
+      if (Date.now() - statSync(lockDir).mtimeMs > STALE_LOCK_MS) {
+        rmSync(lockDir, { recursive: true, force: true });
+        continue;
+      }
+    } catch {
+      // The lock vanished between EEXIST and stat: retry immediately.
+      continue;
+    }
+    if (Date.now() - started > LOCK_TIMEOUT_MS) {
+      throw new Error("build:desktop timed out waiting for the build lock");
+    }
+    sleepSync(200);
+  }
+}
+
+function releaseBuildLock() {
+  rmSync(lockDirPath(), { recursive: true, force: true });
+}
+
+/**
+ * Atomically replaces dist with the freshly built staging directory.
+ */
+function swapStagingIntoDist() {
+  const retiringDir = `${distDir}-retiring`;
+  rmSync(retiringDir, { recursive: true, force: true });
+  if (existsSync(distDir)) {
+    renameSync(distDir, retiringDir);
+  }
+  renameSync(stagingDir, distDir);
+  rmSync(retiringDir, { recursive: true, force: true });
+}
+
+/**
+ * Content fingerprint over every build input. When it matches the stamp in
+ * the existing dist, the build is up to date and is skipped, keeping
+ * repeated invocations (for example parallel vitest hooks) fast and
+ * deterministic.
+ */
+function inputFingerprint() {
+  const hash = createHash("sha256");
+  const inputs = [];
+  const collect = (dir) => {
+    if (existsSync(dir)) inputs.push(...listFiles(dir));
+  };
+  collect(join(desktopDir, "src"));
+  collect(join(desktopDir, "public"));
+  collect(join(repoRoot, "packages", "agent-contracts", "src"));
+  collect(join(repoRoot, "packages", "agent-core", "src"));
+  collect(join(repoRoot, "packages", "local-agent-client", "src"));
+  collect(tauriApiDir);
+  inputs.push(
+    join(desktopDir, "tsconfig.json"),
+    join(desktopDir, "package.json"),
+    join(repoRoot, "tsconfig.base.json"),
+    join(repoRoot, "scripts", "build-desktop.mjs"),
+  );
+  for (const file of inputs.sort()) {
+    hash.update(relative(repoRoot, file));
+    hash.update(readFileSync(file));
+  }
+  return hash.digest("hex");
+}
+
 function main() {
   assertCleanSlate();
-  console.log("build:desktop cleaning dist");
-  rmSync(distDir, { recursive: true, force: true });
-  compileDesktop();
-  compileVendorPackages();
-  vendorTauriApi();
-  console.log("build:desktop rewriting bare imports to vendored files");
-  rewriteBareImports();
-  assertNoBareImportsRemain();
-  writeIndexHtml();
-  copyStaticAssets();
-  console.log("build:desktop wrote apps/desktop/dist (native ESM + vendor)");
+  // Lock-free fast path: when dist already matches the current inputs,
+  // concurrent callers (for example parallel vitest hooks) return instantly
+  // without ever contending on the build lock.
+  const fingerprint = inputFingerprint();
+  const stampPath = join(distDir, ".build-stamp");
+  if (existsSync(stampPath) && readFileSync(stampPath, "utf8") === fingerprint) {
+    console.log("build:desktop up to date (inputs unchanged)");
+    return;
+  }
+  acquireBuildLock();
+  try {
+    console.log("build:desktop cleaning staging output");
+    rmSync(stagingDir, { recursive: true, force: true });
+    compileDesktop();
+    compileVendorPackages();
+    vendorTauriApi();
+    console.log("build:desktop rewriting bare imports to vendored files");
+    rewriteBareImports();
+    assertNoBareImportsRemain();
+    writeIndexHtml();
+    copyStaticAssets();
+    writeFileSync(join(stagingDir, ".build-stamp"), fingerprint);
+    swapStagingIntoDist();
+    console.log("build:desktop wrote apps/desktop/dist (native ESM + vendor)");
+  } finally {
+    releaseBuildLock();
+  }
 }
 
 main();

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -209,11 +209,18 @@ const required = [
   "apps/desktop/src-tauri/src/commands.rs",
   "apps/desktop/src-tauri/src/errors.rs",
   "apps/desktop/src-tauri/src/validation.rs",
+  "apps/desktop/src-tauri/src/backend.rs",
+  "apps/desktop/src-tauri/src/runtime.rs",
+  ".cargo/config.toml",
   "scripts/build-desktop.mjs",
   "tests/helpers/tauri-native-fixtures.ts",
   "tests/task-18-tauri-native-shell.test.ts",
   "tests/task-18-tauri-native-security.test.ts",
   "tests/task-18-tauri-native-build.test.ts",
+  "docs/verification/task-19-report.md",
+  "tests/task-19-native-runtime.test.ts",
+  "tests/task-19-native-runtime-security.test.ts",
+  "tests/task-19-native-build.test.ts",
   "tests/helpers/local-agent-client-fixtures.ts",
   "tests/task-16-local-agent-client.test.ts",
   "tests/task-16-local-agent-client-streaming.test.ts",
@@ -421,6 +428,31 @@ runScenario("task 18 Tauri native shell and host IPC", [
   "tests/task-18-tauri-native-build.test.ts",
 ]);
 
+// Stage 1 additionally asserts the Task 19 build-output guarantees: the
+// repository-level Cargo config exists, pins the root target directory, and
+// no Rust build artifacts pollute apps/desktop/src-tauri/target.
+{
+  const cargoConfig = readFileSync(join(root, ".cargo/config.toml"), "utf8");
+  assert.equal(cargoConfig.includes("[build]"), true, ".cargo/config.toml must contain [build]");
+  assert.equal(
+    cargoConfig.includes('target-dir = "target"'),
+    true,
+    '.cargo/config.toml must pin target-dir = "target"',
+  );
+  assert.equal(
+    existsSync(join(root, "apps/desktop/src-tauri/target")),
+    false,
+    "apps/desktop/src-tauri/target must not exist; build output belongs to the repository root target/",
+  );
+  console.log("evals:deterministic stage 1 cargo target check passed.");
+}
+
+runScenario("task 19 native host runtime boundary and reproducible build", [
+  "tests/task-19-native-runtime.test.ts",
+  "tests/task-19-native-runtime-security.test.ts",
+  "tests/task-19-native-build.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -504,5 +536,12 @@ console.log(
     "backend-dependent commands validate strictly then return the fixed host_not_ready error.",
     "No fabricated session, turn or event; no provider, credential, environment or network",
     "access; no shell/fs/http/process/sql plugin; installers remain future work.",
+    "Task 19 adds the injectable native host runtime boundary: a HostBackend trait with the",
+    "NotReadyBackend production default, a per-app HostRuntime registered as Tauri state, and",
+    "commands that validate strictly before delegating. The default backend still answers the",
+    "fixed host_not_ready error; no real backend, provider, model call, credential store or",
+    "network exists yet. Cargo build output is pinned to the repository root target/ through",
+    ".cargo/config.toml, so apps/desktop/src-tauri/target never reappears and the security",
+    "scan stays reproducible. Task 20 and Task 21 have not been started.",
   ].join(" "),
 );

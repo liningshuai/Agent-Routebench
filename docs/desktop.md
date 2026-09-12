@@ -5,13 +5,16 @@
 The `@agent-workbench/desktop` package provides a Tauri-ready Desktop foundation with interactive UI, testable state management, dependency injection, and strict security boundaries for building the Agent Workbench desktop application.
 
 **Current Status:** Interactive UI, the Task 16 loopback adapter, the Task 17
-dependency-injected Tauri IPC bridge, and the Task 18 Tauri native shell are
-implemented. The Desktop package uses `createLoopbackDesktopApiClient()` for
-local development and `createTauriDesktopApiClient({ invoke, listen })` when
-hosted by Tauri. `apps/desktop/src-tauri/` now contains a real Tauri 2 Rust
-host whose backend-dependent commands return the fixed `host_not_ready` error
-until the Agent backend is assembled (Task 21). Production installers remain
-future work (`bundle.active: false`).
+dependency-injected Tauri IPC bridge, the Task 18 Tauri native shell, and the
+Task 19 native host runtime boundary are implemented. The Desktop package uses
+`createLoopbackDesktopApiClient()` for local development and
+`createTauriDesktopApiClient({ invoke, listen })` when hosted by Tauri.
+`apps/desktop/src-tauri/` contains a real Tauri 2 Rust host whose commands
+delegate through an injectable `HostBackend` seam; the production default
+`NotReadyBackend` still answers the fixed `host_not_ready` error until the
+Agent backend is assembled (Task 21). Cargo build output is pinned to the
+repository root `target/` via `.cargo/config.toml`. Production installers
+remain future work (`bundle.active: false`).
 
 ## Architecture
 

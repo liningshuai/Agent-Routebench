@@ -26,7 +26,7 @@ Anthropic Messages   OpenAI-compatible
 
 ## 已完成层级
 
-截至 Task 18，以下层级已实现并通过测试：
+截至 Task 19，以下层级已实现并通过测试：
 
 - **Desktop Interactive UI**（Task 15）：`mountDesktopUi()`、响应式渲染、会话切换、取消按钮、草稿保留、卸载清理与浏览器入口
 - **Desktop**（Task 14: `@agent-workbench/desktop`）：Tauri-ready 基础层，状态管理、API 边界、安全 ViewModel
@@ -691,3 +691,24 @@ Desktop 的 loopback 适配器：
 
 CredentialStore / OS Keychain 持久化、审批 UI 与自动批准策略、Tauri Rust 原生宿主与生产打包、
 向量搜索、真实模型摘要调用等。
+
+### Task 19（已完成：Native Host Runtime Boundary 与可复现构建加固）
+
+Task 19 在 Task 18 的原生壳层内建立可注入、可测试、可替换的 Backend 边界：
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| Backend 抽象 | `src-tauri/src/backend.rs` | `HostBackend: Send + Sync` trait（三方法，固定 `HostError` 错误类型）+ 生产默认 `NotReadyBackend` |
+| 运行时容器 | `src-tauri/src/runtime.rs` | `HostRuntime { backend: Arc<dyn HostBackend> }`，Tauri State 管理，显式注入替换 |
+| 构建固化 | `.cargo/config.toml` | `target-dir = "target"` → 仓库根；`src-tauri/target` 不再出现 |
+
+边界：
+
+- 默认 Backend 仍是 `NotReadyBackend`：三个后端命令在严格校验后统一返回固定
+  `host_not_ready`；Task 19 没有真实 Agent Backend、真实 Provider、真实模型调用、
+  CredentialStore 读取、Local Agent API Server 启动或 Node 子进程。
+- 校验严格先于委托：非法/敏感/未知字段在 Backend 调用前被拒绝（Rust 与 TypeScript
+  双侧测试守护）。
+- 无全局可变状态、无单例；fake backend 仅存在于 `#[cfg(test)]`。
+- Rust 单元测试 47 个；Task 19 TypeScript 测试 43 个。
+- 详见 [Tauri](tauri.md)。

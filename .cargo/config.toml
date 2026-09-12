@@ -1,0 +1,10 @@
+# Repository-level Cargo configuration.
+#
+# Build output is pinned to the repository root `target/` directory so that
+# Rust artifacts never appear under apps/desktop/src-tauri/target, where the
+# repository security scan would choke on multi-hundred-megabyte staticlibs.
+# Relative target-dir paths are resolved by cargo against the directory that
+# contains this config file (the repository root), for every invocation whose
+# working directory lives inside the repository.
+[build]
+target-dir = "target"

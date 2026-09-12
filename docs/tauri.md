@@ -161,3 +161,57 @@ error messages the renderer already handles.
 - No system tray, native file dialogs, auto-update, or installer packaging
   (`tauri build --no-bundle` / `bundle.active: false` for this MVP).
 - No Node side-process is started by the host.
+
+---
+
+# Task 19 — Native Host Runtime Boundary and Reproducible Build Hardening
+
+Task 19 introduces an injectable backend seam inside the Rust host and pins
+the Cargo build output to the repository root. The IPC contract, the
+`host_not_ready` behavior and every security boundary from Task 18 are
+unchanged. Task 20 and Task 21 have not been started.
+
+## HostBackend / HostRuntime
+
+- `src-tauri/src/backend.rs` defines `pub trait HostBackend: Send + Sync` with
+  exactly three methods (`create_session`, `start_turn`, `cancel_turn`), all
+  returning `Result<serde_json::Value, HostError>`. Because the error type is
+  the fixed contract, dynamic exception text, paths or URLs are
+  unrepresentable at the boundary by construction.
+- The production default is `NotReadyBackend`: it answers every operation
+  with the fixed `host_not_ready` error and fabricates nothing.
+- `src-tauri/src/runtime.rs` defines `HostRuntime { backend:
+  Arc<dyn HostBackend> }`. `HostRuntime::not_ready()` builds a fresh
+  instance per Tauri App; `with_backend(Arc<dyn HostBackend>)` is the only
+  injection point and is used exclusively by tests. There is no global state,
+  no `static mut`, no singleton.
+- `lib.rs` registers the default runtime with
+  `.manage(HostRuntime::not_ready())`. Each Tauri App instance owns exactly
+  one runtime; two instances never share backend state.
+- Commands keep the Task 18 order: receive arguments → validate
+  (`sessionId` / `turnId` / request, sensitive fields first, unknown fields
+  next) → on failure return the fixed error without consulting the backend →
+  only then delegate to `runtime.backend()`. `agent_health` takes no state
+  and never reads the backend.
+- No fake backend exists in production code; test fakes live exclusively
+  inside `#[cfg(test)]` modules.
+
+## Cargo build output pinned to the repository root
+
+- `.cargo/config.toml` sets `[build] target-dir = "target"`, resolved by
+  cargo to the repository root for every invocation inside the repository
+  (verified from the repo root and from `apps/desktop`).
+- `apps/desktop/src-tauri/target/` never reappears; `corepack pnpm
+  security:scan` runs cleanly while full build artifacts exist at the root
+  (they are git-ignored and outside the scan roots). No scan-script
+  modification was needed.
+- Native builds do not depend on a shell-local `CARGO_TARGET_DIR`: the Task
+  19 build tests delete that variable from the environment before running
+  cargo and tauri.
+- Caution: build-script metadata between crates carries absolute paths, so a
+  target directory must never be MOVED. Change it via
+  `.cargo/config.toml` plus `cargo clean` if ever needed.
+- `scripts/build-desktop.mjs` additionally serializes concurrent builds with
+  a cross-process lock, swaps a freshly built staging directory into `dist`
+  atomically, and skips the build entirely when a content fingerprint over
+  all inputs is unchanged.

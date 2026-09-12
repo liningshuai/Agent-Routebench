@@ -4,7 +4,17 @@
 
 ## 当前阶段
 
-**Task 18：Tauri Native Desktop Shell and Host IPC MVP**。在 Task 17 的 TypeScript IPC bridge 基础上，加入真实的 Tauri 2 原生宿主基础层（alpha / early development）：
+**Task 19：Native Host Runtime Boundary 与可复现构建加固**。在 Task 18 的原生壳层上引入可注入的 Backend 边界，并把 Cargo 构建输出固化到仓库根（alpha / early development）：
+
+- `HostBackend` trait（`Send + Sync`）：`create_session` / `start_turn` / `cancel_turn` 三个方法统一返回 `Result<serde_json::Value, HostError>`，错误类型即固定契约，动态异常文本在类型层面无法穿越边界
+- 生产默认实现 `NotReadyBackend`：三个操作统一返回固定 `host_not_ready`；不伪造 Session、Turn、Turn ID 或事件
+- `HostRuntime { backend: Arc<dyn HostBackend> }`：由 Tauri State 管理（`.manage(HostRuntime::not_ready())`），每个 App 实例独享；`with_backend(Arc)` 为显式注入点，仅测试与未来组装使用；无全局可变状态、无单例
+- 委托顺序固定：接收参数 → 校验（敏感字段 → 未知字段 → 结构）→ 失败立即返回固定错误（不触碰 Backend）→ 校验通过才委托 `runtime.backend()`；`agent_health` 不接收 State、不读取 Backend
+- Cargo 构建输出经 `.cargo/config.toml` 固化到仓库根 `target/`（git 忽略、在安全扫描根之外）：`src-tauri/target` 不再出现，安全扫描在有构建产物的状态下可复现通过；native build 不依赖 shell 临时 `CARGO_TARGET_DIR`
+- `build:desktop` 增加 cross-process 锁、staging 原子交换与输入指纹跳过，并行调用安全
+- 仍然没有：真实 Backend、Provider、模型调用、CredentialStore、Local Agent API Server、Node 子进程、安装包、托盘、远程网络、真实 `agent_turn_event` 发布；Task 20/21 尚未开始
+
+**Task 18：Tauri Native Desktop Shell and Host IPC MVP**。在 Task 17 的 TypeScript IPC bridge 基础上，加入真实的 Tauri 2 原生宿主基础层：
 
 - `apps/desktop/src-tauri/`：可编译的 Tauri 2 Rust 项目（`Cargo.toml`、`build.rs`、`main.rs`、`lib.rs`、`commands.rs`、`errors.rs`、`validation.rs`）
 - 四个固定 command 经 `tauri::generate_handler!` 注册：`agent_health`、`agent_create_session`、`agent_start_turn`、`agent_cancel_turn`；保留事件名 `agent_turn_event`，与 `TAURI_COMMANDS` / `TAURI_EVENTS` 完全一致
