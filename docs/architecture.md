@@ -5,11 +5,13 @@
 ```text
 Desktop (Task 15: Interactive UI, Task 14: @agent-workbench/desktop)
    |                         |
-   +-- Tauri IPC Bridge (Task 17) ----------------+
-   |                                             |
-   +-- Shared Local Agent API Client (Task 16) --+
-                                               |
-CLI (Task 13: @agent-workbench/cli) ------------+
+   +-- Tauri Native Shell (Task 18: src-tauri Rust host) --+
+   |    |                                                  |
+   +-- Tauri IPC Bridge (Task 17) -------------------------+
+   |                                                      |
+   +-- Shared Local Agent API Client (Task 16) -----------+
+                                                          |
+CLI (Task 13: @agent-workbench/cli) ----------------------+
                                                |
                                         Local Agent API
    |
@@ -24,7 +26,7 @@ Anthropic Messages   OpenAI-compatible
 
 ## 已完成层级
 
-截至 Task 17，以下层级已实现并通过测试：
+截至 Task 18，以下层级已实现并通过测试：
 
 - **Desktop Interactive UI**（Task 15）：`mountDesktopUi()`、响应式渲染、会话切换、取消按钮、草稿保留、卸载清理与浏览器入口
 - **Desktop**（Task 14: `@agent-workbench/desktop`）：Tauri-ready 基础层，状态管理、API 边界、安全 ViewModel
@@ -41,7 +43,7 @@ Anthropic Messages   OpenAI-compatible
 
 未完成层级：
 
-- **Tauri 原生宿主**：Rust `src-tauri` 项目、命令实现、权限配置、原生窗口/菜单/托盘与生产打包尚未接入。Task 17 已完成 TypeScript bridge contract MVP。
+- **Tauri 原生宿主**（Task 18：`apps/desktop/src-tauri/`）：Tauri 2 Rust 项目可编译、原生窗口可启动；四个固定 command 经 `generate_handler!` 注册；严格 CSP 与最小 capabilities；后端依赖命令返回固定 `host_not_ready`。完整 Agent Backend 组装（Task 21）、菜单/托盘与生产打包尚未接入。
 
 ## 契约层与依赖方向
 
@@ -632,6 +634,30 @@ Desktop 与 Tauri 宿主之间的可测试通信边界：
   真实 Tauri host 只需在应用层注入官方 `invoke` / `listen`。
 - 28 个聚焦测试覆盖 contract、security、streaming、cancellation 和 class 实例边界。
 - 详见 [Tauri Desktop IPC Bridge](tauri.md)。
+
+### Task 18（已完成：Tauri Native Shell and Host IPC MVP）
+
+Task 18 加入真实的 Tauri 2 原生宿主（alpha / early development）：
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| Rust 项目 | `apps/desktop/src-tauri/Cargo.toml`、`build.rs` | Tauri 2 构建链，依赖仅 tauri / tauri-build / serde / serde_json |
+| 命令注册 | `src-tauri/src/lib.rs`、`commands.rs` | `generate_handler!` 注册四个固定 command；`agent_health` 只报告宿主进程 |
+| 错误契约 | `src-tauri/src/errors.rs` | 固定 `HostError{code,message}`；五种固定错误码；无动态内容 |
+| 请求校验 | `src-tauri/src/validation.rs` | 纯函数校验：标识符、messages、tools、maxTokens；先拒绝敏感字段，再拒绝未知字段 |
+| 配置 | `src-tauri/tauri.conf.json`、`capabilities/default.json` | 单一 main 窗口、严格 CSP、仅 `core:event:default`、无远程 devUrl、`bundle.active:false` |
+| 前端入口 | `apps/desktop/src/tauri-entry.ts` | 官方 `invoke`/`listen` → `createTauriDesktopApiClient` → `mountDesktopUi` |
+| 构建脚本 | `scripts/build-desktop.mjs` | 确定性原生 ESM 构建：tsc → dist、vendored 运行时闭包、bare import 重写 |
+
+边界：
+
+- 后端未组装：`agent_create_session` / `agent_start_turn` / `agent_cancel_turn`
+  校验输入后统一返回固定 `host_not_ready`；不伪造 Session、Turn、事件或模型响应。
+- Rust 宿主不读环境变量、不起子进程、不开网络客户端、不触碰凭据。
+- capabilities 仅 `core:event:default`（main 窗口）；Cargo 不含任何插件 crate。
+- 构建产物只暴露 `dist/` 下同源资源；不暴露 src、tests、node_modules、`.superpowers/`。
+- Rust 单元测试 32 个随 `cargo test` 执行；TypeScript 侧 Task 18 聚焦测试 79 个。
+- 详见 [Tauri](tauri.md)。
 
 
 ### Task 16（已完成）

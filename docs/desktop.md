@@ -4,11 +4,14 @@
 
 The `@agent-workbench/desktop` package provides a Tauri-ready Desktop foundation with interactive UI, testable state management, dependency injection, and strict security boundaries for building the Agent Workbench desktop application.
 
-**Current Status:** Interactive UI, the Task 16 loopback adapter, and the Task 17
-dependency-injected Tauri IPC bridge are implemented. The Desktop package uses
-`createLoopbackDesktopApiClient()` for local development and
-`createTauriDesktopApiClient({ invoke, listen })` when hosted by Tauri. The native
-Rust/Tauri host and production packaging remain future work.
+**Current Status:** Interactive UI, the Task 16 loopback adapter, the Task 17
+dependency-injected Tauri IPC bridge, and the Task 18 Tauri native shell are
+implemented. The Desktop package uses `createLoopbackDesktopApiClient()` for
+local development and `createTauriDesktopApiClient({ invoke, listen })` when
+hosted by Tauri. `apps/desktop/src-tauri/` now contains a real Tauri 2 Rust
+host whose backend-dependent commands return the fixed `host_not_ready` error
+until the Agent backend is assembled (Task 21). Production installers remain
+future work (`bundle.active: false`).
 
 ## Architecture
 
@@ -286,21 +289,34 @@ controller.cancelTurn(sessionId);
 
 ## Future Work
 
-### Tauri Integration (Task 17 bridge MVP)
+### Tauri Native Shell (Task 18 MVP)
 
-The TypeScript-side IPC contract is now implemented without adding a Tauri package
-dependency. `createTauriDesktopApiClient({ invoke, listen })` adapts the injected host
-functions to the existing `DesktopApiClient`; `mountDesktopUi()` can use the resulting
-client in the renderer. See [Tauri Desktop IPC Bridge](tauri.md) for the fixed command
-and event names.
+Task 18 wires the TypeScript bridge to a real Tauri 2 host:
 
-The following host work remains outside this package:
+1. **Native commands:** `apps/desktop/src-tauri/src/commands.rs` registers
+   `agent_health`, `agent_create_session`, `agent_start_turn` and
+   `agent_cancel_turn` through `tauri::generate_handler!`. The names match
+   `TAURI_COMMANDS` exactly; the reserved event name `agent_turn_event`
+   matches `TAURI_EVENTS`.
+2. **Host-not-ready boundary:** without an assembled backend, every
+   backend-dependent command answers
+   `{ "code": "host_not_ready", "message": "Agent host backend is not ready." }`
+   after strict input validation. Nothing is fabricated.
+3. **Frontend entry:** `apps/desktop/src/tauri-entry.ts` imports the official
+   `invoke` / `listen`, builds the Task 17 client and mounts the existing UI.
+   The browser preview keeps using `browser-entry`.
+4. **Deterministic build:** `corepack pnpm build:desktop`
+   (`scripts/build-desktop.mjs`) compiles TypeScript to `dist/`, vendors the
+   runtime import closure and rewrites bare specifiers to relative paths —
+   no bundler, no CDN.
+5. **Restricted configuration:** strict CSP, single `main` window, capabilities
+   limited to `core:event:default`, no plugin crates, `bundle.active: false`.
 
-1. **Native commands:** implement the Rust `src-tauri` handlers for the fixed commands
-2. **Permissions and wiring:** configure Tauri capabilities and inject official `invoke`
-   and `listen` functions from the frontend
-3. **Bundle integration:** consume the compiled ESM output from the Tauri build
-4. **Native features:** add file dialogs, system tray, menu bar and other host APIs
+The following host work remains outside this MVP:
+
+1. **Backend assembly:** connect the complete Agent Backend (Task 21)
+2. **Native features:** file dialogs, system tray, menu bar, auto-update
+3. **Installers:** `tauri build` bundling for Windows/macOS/Linux
 
 ### Test Coverage Improvements
 

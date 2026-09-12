@@ -197,6 +197,23 @@ const required = [
   "docs/verification/task-16-report.md",
   "docs/tauri.md",
   "docs/verification/task-17-report.md",
+  "docs/verification/task-18-report.md",
+  "apps/desktop/src/tauri-entry.ts",
+  "apps/desktop/src-tauri/Cargo.toml",
+  "apps/desktop/src-tauri/Cargo.lock",
+  "apps/desktop/src-tauri/build.rs",
+  "apps/desktop/src-tauri/tauri.conf.json",
+  "apps/desktop/src-tauri/capabilities/default.json",
+  "apps/desktop/src-tauri/src/main.rs",
+  "apps/desktop/src-tauri/src/lib.rs",
+  "apps/desktop/src-tauri/src/commands.rs",
+  "apps/desktop/src-tauri/src/errors.rs",
+  "apps/desktop/src-tauri/src/validation.rs",
+  "scripts/build-desktop.mjs",
+  "tests/helpers/tauri-native-fixtures.ts",
+  "tests/task-18-tauri-native-shell.test.ts",
+  "tests/task-18-tauri-native-security.test.ts",
+  "tests/task-18-tauri-native-build.test.ts",
   "tests/helpers/local-agent-client-fixtures.ts",
   "tests/task-16-local-agent-client.test.ts",
   "tests/task-16-local-agent-client-streaming.test.ts",
@@ -398,6 +415,12 @@ runScenario("task 17 Tauri Desktop IPC bridge", [
   "tests/task-17-tauri-bridge-cancellation.test.ts",
 ]);
 
+runScenario("task 18 Tauri native shell and host IPC", [
+  "tests/task-18-tauri-native-shell.test.ts",
+  "tests/task-18-tauri-native-security.test.ts",
+  "tests/task-18-tauri-native-build.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -474,5 +497,12 @@ console.log(
     "It validates IPC envelopes, filters concurrent session/turn events, sanitizes host errors,",
     "and ends streams promptly on cancellation. No Tauri package, Rust host, provider call,",
     "credential access or remote network is included.",
+    "Task 18 adds the Tauri 2 native shell MVP: a compilable src-tauri Rust host registering",
+    "the four fixed agent_* commands, a real tauri-entry frontend wired through the Task 17",
+    "bridge, strict CSP, minimal core-event-only capabilities and a deterministic native-ESM",
+    "Desktop build with vendored runtime imports. agent_health reports only the host process;",
+    "backend-dependent commands validate strictly then return the fixed host_not_ready error.",
+    "No fabricated session, turn or event; no provider, credential, environment or network",
+    "access; no shell/fs/http/process/sql plugin; installers remain future work.",
   ].join(" "),
 );

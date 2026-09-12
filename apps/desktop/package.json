@@ -12,9 +12,11 @@
   "dependencies": {
     "@agent-workbench/agent-core": "workspace:*",
     "@agent-workbench/local-agent-api": "workspace:*",
-    "@agent-workbench/local-agent-client": "workspace:*"
+    "@agent-workbench/local-agent-client": "workspace:*",
+    "@tauri-apps/api": "^2.9.5"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.9.6",
     "typescript": "^5.9.3"
   }
 }

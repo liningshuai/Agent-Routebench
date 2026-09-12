@@ -1,0 +1,27 @@
+{
+  "productName": "Agent Routebench",
+  "version": "0.1.0",
+  "identifier": "com.liningshuai.agentroutebench",
+  "build": {
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src ipc: http://ipc.localhost"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "Agent Routebench",
+        "width": 1440,
+        "height": 960,
+        "minWidth": 1024,
+        "minHeight": 700,
+        "resizable": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": false
+  }
+}

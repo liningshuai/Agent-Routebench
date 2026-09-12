@@ -64,3 +64,100 @@ Task 17 does not add a Rust src-tauri project, Tauri permissions,
 window/menu/tray APIs, native filesystem dialogs, or production host commands.
 Those are host-application work that can consume this stable TypeScript
 contract in a later task.
+
+---
+
+# Task 18 — Tauri Native Desktop Shell and Host IPC MVP
+
+Task 18 adds the real Tauri 2 native host under `apps/desktop/src-tauri/`.
+The project is now in an **alpha / early development** stage: the native
+window starts, the fixed IPC contract is registered in Rust, and the
+frontend entry is real — but the Agent backend is deliberately **not**
+assembled yet (that is Task 21's job).
+
+## What Task 18 delivers
+
+- A compilable Tauri 2 Rust project: `src-tauri/Cargo.toml`, `build.rs`,
+  `src/main.rs`, `src/lib.rs`, plus the focused modules `commands.rs`,
+  `errors.rs` and `validation.rs`.
+- The four fixed commands registered through
+  `tauri::generate_handler!`: `agent_health`, `agent_create_session`,
+  `agent_start_turn`, `agent_cancel_turn`. The names are byte-identical to
+  `TAURI_COMMANDS` in `apps/desktop/src/tauri-api-client.ts`; the reserved
+  event name `agent_turn_event` matches `TAURI_EVENTS`.
+- A real Tauri frontend entry, `apps/desktop/src/tauri-entry.ts`, which
+  imports the official `invoke` / `listen` from `@tauri-apps/api/core` and
+  `@tauri-apps/api/event`, builds the client with the Task 17
+  `createTauriDesktopApiClient` factory and mounts the existing
+  `mountDesktopUi`. There is no second IPC implementation.
+- A deterministic native-ESM build, `scripts/build-desktop.mjs`
+  (`corepack pnpm build:desktop`): TypeScript compiles to
+  `apps/desktop/dist`, the runtime import closure
+  (`@tauri-apps/api`, `@agent-workbench/local-agent-client`,
+  `@agent-workbench/agent-core`, `@agent-workbench/agent-contracts`) is
+  vendored into `dist/vendor`, and bare specifiers are rewritten to relative
+  paths. No bundler, no CDN, no external script. `dist/index.html` loads
+  `./tauri-entry.js`; the browser preview (`public/index.html` +
+  `docs/previews/desktop-ui-preview.html`) keeps using the browser entry and
+  is untouched.
+- A restricted, auditable configuration: `tauri.conf.json` sets
+  `productName: "Agent Routebench"`,
+  `identifier: com.liningshuai.agentroutebench`, `frontendDist: "../dist"`,
+  no remote `devUrl`, a single `main` window (1440x960, min 1024x700,
+  resizable) and a strict CSP (`default-src 'self'; script-src 'self';
+  style-src 'self'`, plus the Tauri IPC loopback `connect-src ipc:
+  http://ipc.localhost`). `bundle.active` is false — installers are a later
+  task.
+- Minimal capabilities (`capabilities/default.json`): only `core:event:default`
+  for the `main` window. No shell, fs, http, process, sql, dialog,
+  clipboard, notification, opener, global-shortcut, updater or tray plugin
+  is referenced in the config or the Cargo manifest.
+
+## Host behavior boundary (no fabricated backend)
+
+`agent_health` reports only that the native host process is up:
+
+~~~json
+{ "ok": true, "service": "agent-workbench-tauri-host", "version": 1 }
+~~~
+
+Every backend-dependent command answers with the single fixed error
+`{ "code": "host_not_ready", "message": "Agent host backend is not ready." }`:
+
+- `agent_create_session` — never returns a fabricated session.
+- `agent_start_turn` — validates the session id and the request first
+  (unknown fields, sensitive fields such as `apiKey` / `token` /
+  `authorization` / `headers` / `secret` / `password` / `credential` /
+  `baseUrl` / `endpoint`, invalid `messages`, `tools` or `maxTokens` all
+  fail with `invalid_request` / `forbidden_field` /
+  `invalid_session_id`), then returns `host_not_ready`. No `text_delta`,
+  `completed`, `tool_call` or `usage` event is ever fabricated.
+- `agent_cancel_turn` — validates both identifiers, then returns
+  `host_not_ready` instead of inventing a successful cancellation.
+
+The fixed error vocabulary is `host_not_ready`, `invalid_request`,
+`invalid_session_id`, `invalid_turn_id`, `forbidden_field`. Error messages
+are static strings: no exception text, stack, path, URL or input echo ever
+crosses the IPC boundary. The Task 17 bridge maps these to the fixed Desktop
+error messages the renderer already handles.
+
+## Security boundaries
+
+- The Rust host reads no environment variables, spawns no processes, opens
+  no network client and touches no filesystem or credential store.
+- Cargo dependencies are limited to `tauri`, `tauri-build`, `serde` and
+  `serde_json`. No provider SDK, no HTTP client crate, no plugin crates.
+- The webview loads only same-origin assets under `frontendDist`
+  (`../dist`); the built output never exposes `src`, tests, `node_modules`
+  or `.superpowers/`.
+- No real provider is contacted, no credential is read, no remote network is
+  used — during tests or at runtime.
+
+## What Task 18 does not do
+
+- No full Agent backend assembly (Task 21 connects the complete backend).
+- No CredentialStore, OS Keychain or secret persistence.
+- No real model/provider calls, no shell/file/network tools, no approval UI.
+- No system tray, native file dialogs, auto-update, or installer packaging
+  (`tauri build --no-bundle` / `bundle.active: false` for this MVP).
+- No Node side-process is started by the host.

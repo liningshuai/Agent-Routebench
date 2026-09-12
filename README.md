@@ -4,6 +4,18 @@
 
 ## 当前阶段
 
+**Task 18：Tauri Native Desktop Shell and Host IPC MVP**。在 Task 17 的 TypeScript IPC bridge 基础上，加入真实的 Tauri 2 原生宿主基础层（alpha / early development）：
+
+- `apps/desktop/src-tauri/`：可编译的 Tauri 2 Rust 项目（`Cargo.toml`、`build.rs`、`main.rs`、`lib.rs`、`commands.rs`、`errors.rs`、`validation.rs`）
+- 四个固定 command 经 `tauri::generate_handler!` 注册：`agent_health`、`agent_create_session`、`agent_start_turn`、`agent_cancel_turn`；保留事件名 `agent_turn_event`，与 `TAURI_COMMANDS` / `TAURI_EVENTS` 完全一致
+- `agent_health` 只报告原生宿主进程健康；`agent_create_session` / `agent_start_turn` / `agent_cancel_turn` 在后端未组装时统一返回固定 `host_not_ready` 错误，不伪造任何 Session、Turn 或事件
+- Rust 侧严格请求校验：拒绝未知字段与敏感字段（`apiKey`、`token`、`authorization`、`headers`、`secret`、`password`、`credential`、`baseUrl`、`endpoint` 等），固定错误码 `host_not_ready` / `invalid_request` / `invalid_session_id` / `invalid_turn_id` / `forbidden_field`，错误消息静态、不含输入回显
+- `tauri-entry.ts`：从官方 `@tauri-apps/api/core` / `@tauri-apps/api/event` 导入 `invoke` / `listen`，经 Task 17 的 `createTauriDesktopApiClient` 接入现有 `mountDesktopUi`；浏览器预览入口保持不变
+- 确定性原生 ESM 构建（`pnpm build:desktop` → `scripts/build-desktop.mjs`）：TypeScript 编译到 `dist/`，运行时依赖闭包 vendored 到 `dist/vendor`，无打包器、无 CDN、无外部脚本
+- 受限配置：单一 `main` 窗口、严格 CSP（`default-src 'self'; script-src 'self'; style-src 'self'`）、capabilities 仅 `core:event:default`、无 shell/fs/http/process/sql 插件、`bundle.active: false`（正式安装包属于后续任务）
+- Cargo 依赖仅 `tauri`、`tauri-build`、`serde`、`serde_json`；Rust 单元测试 32 个随 `cargo test` 执行
+- 不读取凭据、不访问 Provider、不连接远程网络、不启动子进程；完整 Agent Backend 组装属于 Task 21
+
 **Task 17：Tauri Desktop IPC Bridge MVP**。在 Task 16 的共享 loopback 客户端基础上，增加一个不绑定具体 Tauri 版本的宿主通信适配层：
 
 - `TauriDesktopApiClient`：将宿主注入的 `invoke` / `listen` 映射为现有 `DesktopApiClient`
@@ -123,7 +135,7 @@
 - shell / 文件 / 网络工具（runtime 不提供任何默认工具，也不具备这些能力）
 - 审批 UI 与自动批准策略
 - 审批决策持久化与 “remember this decision”
-- 完整 Tauri 原生应用打包、Rust host command 实现与生产 IPC 部署（Task 17 仅完成 TypeScript bridge contract）
+- 完整 Agent Backend 组装与真实模型调用端到端验证（Rust host 目前只提供 Host Health，`host_not_ready` 边界已在 Task 18 固定）
 - CredentialStore secret 持久化与 OS Keychain
 - 持久化 Memory、向量搜索、真实模型摘要调用
 
