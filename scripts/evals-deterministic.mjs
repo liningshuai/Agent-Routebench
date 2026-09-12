@@ -451,6 +451,7 @@ runScenario("task 19 native host runtime boundary and reproducible build", [
   "tests/task-19-native-runtime.test.ts",
   "tests/task-19-native-runtime-security.test.ts",
   "tests/task-19-native-build.test.ts",
+  "tests/task-19-response-boundary.test.ts",
 ]);
 
 console.log(

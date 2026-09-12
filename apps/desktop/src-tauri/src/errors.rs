@@ -12,6 +12,8 @@ pub const INVALID_REQUEST: &str = "invalid_request";
 pub const INVALID_SESSION_ID: &str = "invalid_session_id";
 pub const INVALID_TURN_ID: &str = "invalid_turn_id";
 pub const FORBIDDEN_FIELD: &str = "forbidden_field";
+#[allow(dead_code)]
+pub const INVALID_RESPONSE: &str = "invalid_response";
 
 /// A fixed, serializable host error. Only `code` and `message` are exposed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -52,6 +54,14 @@ impl HostError {
             "Agent host request contains a forbidden field.",
         )
     }
+
+    /// A backend-produced success response failed the fixed response contract.
+    /// Consumed by the typed response constructors; the MVP default backend
+    /// never fabricates a success.
+    #[allow(dead_code)]
+    pub const fn invalid_response() -> Self {
+        Self::new(INVALID_RESPONSE, "Agent host response is invalid.")
+    }
 }
 
 impl std::fmt::Display for HostError {
@@ -81,6 +91,7 @@ mod tests {
             HostError::invalid_session_id(),
             HostError::invalid_turn_id(),
             HostError::forbidden_field(),
+            HostError::invalid_response(),
         ];
         for error in errors {
             assert!(!error.code.is_empty());
@@ -97,10 +108,18 @@ mod tests {
             HostError::invalid_session_id().code,
             HostError::invalid_turn_id().code,
             HostError::forbidden_field().code,
+            HostError::invalid_response().code,
         ];
         for (index, code) in codes.iter().enumerate() {
             assert!(!codes[..index].contains(code));
         }
+    }
+
+    #[test]
+    fn invalid_response_has_the_fixed_contract() {
+        let error = HostError::invalid_response();
+        assert_eq!(error.code, "invalid_response");
+        assert_eq!(error.message, "Agent host response is invalid.");
     }
 
     #[test]

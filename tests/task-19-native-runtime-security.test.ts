@@ -95,12 +95,15 @@ describe("Task 19: no fabricated results and no leaks", () => {
     const backend = rustFile("backend.rs");
     // The trait's error type is the fixed HostError contract, so dynamic
     // messages are unrepresentable at the boundary. The trait itself declares
-    // exactly three Result<serde_json::Value, HostError> signatures.
+    // exactly three typed success signatures and no open Value successes.
     const traitRegion = backend.slice(0, backend.indexOf("pub struct NotReadyBackend"));
-    expect(traitRegion.match(/Result<serde_json::Value,\s*HostError>/g)?.length).toBe(3);
+    expect(traitRegion.match(/Result<serde_json::Value,\s*HostError>/g)?.length ?? 0).toBe(0);
+    expect(traitRegion.match(/Result<CreateSessionResponse,\s*HostError>/g)?.length).toBe(1);
+    expect(traitRegion.match(/Result<StartTurnResponse,\s*HostError>/g)?.length).toBe(1);
+    expect(traitRegion.match(/Result<CancelTurnResponse,\s*HostError>/g)?.length).toBe(1);
     const commands = rustFile("commands.rs");
     expect(commands).not.toContain("{:?}");
-    expect(commands).not.toContain("format!(");
+    expect(commands).not.toContain("format!");
     expect(commands).not.toContain("to_string()");
   });
 

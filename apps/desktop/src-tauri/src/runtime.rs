@@ -39,6 +39,7 @@ impl HostRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::{CancelTurnResponse, CreateSessionResponse, StartTurnResponse};
     use crate::errors::HostError;
     use serde_json::Value;
     use std::sync::Mutex;
@@ -70,17 +71,25 @@ mod tests {
     }
 
     impl HostBackend for TestBackend {
-        fn create_session(&self) -> Result<Value, HostError> {
+        fn create_session(&self) -> Result<CreateSessionResponse, HostError> {
             self.record("create_session");
             Err(self.error.clone())
         }
 
-        fn start_turn(&self, _session_id: &str, _request: &Value) -> Result<Value, HostError> {
+        fn start_turn(
+            &self,
+            _session_id: &str,
+            _request: &Value,
+        ) -> Result<StartTurnResponse, HostError> {
             self.record("start_turn");
             Err(self.error.clone())
         }
 
-        fn cancel_turn(&self, _session_id: &str, _turn_id: &str) -> Result<Value, HostError> {
+        fn cancel_turn(
+            &self,
+            _session_id: &str,
+            _turn_id: &str,
+        ) -> Result<CancelTurnResponse, HostError> {
             self.record("cancel_turn");
             Err(self.error.clone())
         }
@@ -142,35 +151,56 @@ mod tests {
 
     #[test]
     fn backend_arguments_are_passed_through_unchanged() {
-        struct EchoBackend;
+        struct EchoBackend {
+            seen: Mutex<Option<(String, usize)>>,
+        }
 
         impl HostBackend for EchoBackend {
-            fn create_session(&self) -> Result<Value, HostError> {
+            fn create_session(&self) -> Result<CreateSessionResponse, HostError> {
                 Err(HostError::host_not_ready())
             }
 
-            fn start_turn(&self, session_id: &str, request: &Value) -> Result<Value, HostError> {
-                Ok(serde_json::json!({
-                    "seenSessionId": session_id,
-                    "seenRequestKeys": request.as_object().map(|o| o.len()).unwrap_or(0)
-                }))
+            fn start_turn(
+                &self,
+                session_id: &str,
+                request: &Value,
+            ) -> Result<StartTurnResponse, HostError> {
+                *self.seen.lock().expect("lock") = Some((
+                    String::from(session_id),
+                    request.as_object().map(|o| o.len()).unwrap_or(0),
+                ));
+                StartTurnResponse::new(String::from("turn-echo"))
             }
 
-            fn cancel_turn(&self, _session_id: &str, _turn_id: &str) -> Result<Value, HostError> {
+            fn cancel_turn(
+                &self,
+                _session_id: &str,
+                _turn_id: &str,
+            ) -> Result<CancelTurnResponse, HostError> {
                 Err(HostError::host_not_ready())
             }
         }
 
-        let runtime = HostRuntime::with_backend(Arc::new(EchoBackend));
+        let echo = Arc::new(EchoBackend {
+            seen: Mutex::new(None),
+        });
+        let runtime = HostRuntime::with_backend(echo.clone());
         let request = serde_json::json!({
             "messages": [{ "role": "user", "content": "hello" }]
         });
-        let result = runtime
+        let response = runtime
             .backend()
             .start_turn("session-abc", &request)
-            .expect("echo");
-        assert_eq!(result["seenSessionId"], "session-abc");
-        assert_eq!(result["seenRequestKeys"], 1);
+            .expect("typed response");
+        // The success value is the closed { turnId } contract, not a value
+        // echoing the request back.
+        assert_eq!(
+            serde_json::to_value(&response).expect("serialize"),
+            serde_json::json!({ "turnId": "turn-echo" })
+        );
+        let seen = echo.seen.lock().expect("lock").clone().expect("recorded");
+        assert_eq!(seen.0, "session-abc");
+        assert_eq!(seen.1, 1);
     }
 
     #[test]

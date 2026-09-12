@@ -712,3 +712,19 @@ Task 19 在 Task 18 的原生壳层内建立可注入、可测试、可替换的
 - 无全局可变状态、无单例；fake backend 仅存在于 `#[cfg(test)]`。
 - Rust 单元测试 47 个；Task 19 TypeScript 测试 43 个。
 - 详见 [Tauri](tauri.md)。
+
+### Task 19 收尾（已完成：固定 Native IPC 成功响应边界）
+
+成功响应从开放式 `serde_json::Value` 收窄为命令专用封闭类型（私有字段 + 校验构造
+函数 + camelCase 序列化）：
+
+| Command | 成功 JSON |
+|------|------|
+| `agent_create_session` | `{ "session": { id, status, createdAt, updatedAt, activeTurnId? } }` |
+| `agent_start_turn` | `{ "turnId": "…" }` |
+| `agent_cancel_turn` | `{ "ok": true }` |
+
+`serde_json::Value` 仅保留为 `agent_start_turn` 的已校验输入；构造器以固定
+`invalid_response` 错误拒绝空 id / 空 turnId / 非有限时间 / 非法 activeTurnId；
+`NotReadyBackend` 行为不变；Task 21 未来只能通过该 typed response contract 接入
+真实 Backend。当前仍无真实模型调用、Provider 接入或 CredentialStore 读取。

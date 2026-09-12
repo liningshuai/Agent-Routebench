@@ -20,13 +20,13 @@ describe("Task 19: HostBackend boundary", () => {
   test("the trait exposes exactly the three backend-shaped methods", () => {
     const backend = rustFile("backend.rs");
     expect(backend).toMatch(
-      /fn\s+create_session\s*\(\s*&self\s*\)\s*->\s*Result<serde_json::Value,\s*HostError>/,
+      /fn\s+create_session\s*\(\s*&self\s*\)\s*->\s*Result<CreateSessionResponse,\s*HostError>/,
     );
     expect(backend).toMatch(
-      /fn\s+start_turn\s*\(\s*&self,\s*session_id:\s*&str,\s*request:\s*&serde_json::Value\s*,?\s*\)\s*->\s*Result<serde_json::Value,\s*HostError>/,
+      /fn\s+start_turn\s*\(\s*&self,\s*session_id:\s*&str,\s*request:\s*&serde_json::Value\s*,?\s*\)\s*->\s*Result<StartTurnResponse,\s*HostError>/,
     );
     expect(backend).toMatch(
-      /fn\s+cancel_turn\s*\(\s*&self,\s*session_id:\s*&str,\s*turn_id:\s*&str\s*,?\s*\)\s*->\s*Result<serde_json::Value,\s*HostError>/,
+      /fn\s+cancel_turn\s*\(\s*&self,\s*session_id:\s*&str,\s*turn_id:\s*&str\s*,?\s*\)\s*->\s*Result<CancelTurnResponse,\s*HostError>/,
     );
   });
 

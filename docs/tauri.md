@@ -215,3 +215,26 @@ unchanged. Task 20 and Task 21 have not been started.
   a cross-process lock, swaps a freshly built staging directory into `dist`
   atomically, and skips the build entirely when a content fingerprint over
   all inputs is unchanged.
+
+## Task 19 收尾 — Typed native IPC success responses
+
+The backend boundary no longer uses open `serde_json::Value` successes. The
+raw `serde_json::Value` type is only allowed as the already-validated
+`agent_start_turn` request *input*; every success crossing the IPC boundary
+is a command-specific closed struct with private fields and a validated
+constructor:
+
+| Command | Success JSON |
+| --- | --- |
+| `agent_create_session` | `{ "session": { "id", "status", "createdAt", "updatedAt", "activeTurnId?" } }` — the wrapper has exactly one field; `status` is one of `idle`, `running`, `completed`, `cancelled`, `failed`; `activeTurnId` is omitted (never `null`) when unset |
+| `agent_start_turn` | `{ "turnId": "…" }` — exactly one field; the request payload is never echoed back |
+| `agent_cancel_turn` | `{ "ok": true }` — exactly one field, always `true` on the success path |
+
+Constructors reject empty ids, empty turn ids, non-finite timestamps and
+empty `activeTurnId` values with the fixed
+`{ "code": "invalid_response", "message": "Agent host response is invalid." }`
+error; the message never embeds serde text, JSON content, paths or input
+echoes. `NotReadyBackend` is unchanged: it still fails all three operations
+with the fixed `host_not_ready` error and fabricates nothing. Task 21 must
+connect a real backend exclusively through this typed response contract;
+no real backend, provider, credential store or model call exists yet.

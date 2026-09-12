@@ -11,6 +11,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tauri::State;
 
+use crate::backend::{CancelTurnResponse, CreateSessionResponse, StartTurnResponse};
 use crate::errors::HostError;
 use crate::runtime::HostRuntime;
 use crate::validation;
@@ -46,17 +47,20 @@ pub fn agent_health() -> HostHealth {
     }
 }
 
-/// Creates an agent session. The request is forwarded to the runtime's
-/// backend only after delegation starts; with the NotReadyBackend default
-/// this answers the fixed host_not_ready error and fabricates no session.
+/// Creates an agent session. The success value is the closed
+/// `CreateSessionResponse` contract (`{ "session": { … } }`); with the
+/// NotReadyBackend default this answers the fixed host_not_ready error and
+/// fabricates no session.
 #[tauri::command]
-pub fn agent_create_session(runtime: State<HostRuntime>) -> Result<Value, HostError> {
+pub fn agent_create_session(
+    runtime: State<HostRuntime>,
+) -> Result<CreateSessionResponse, HostError> {
     // With the NotReadyBackend default this answers the fixed host_not_ready
     // error; no session is ever fabricated here.
     create_session_checked(&runtime)
 }
 
-fn create_session_checked(runtime: &HostRuntime) -> Result<Value, HostError> {
+fn create_session_checked(runtime: &HostRuntime) -> Result<CreateSessionResponse, HostError> {
     runtime.backend().create_session()
 }
 
@@ -69,10 +73,12 @@ pub fn agent_start_turn(
     session_id: String,
     request: Value,
     runtime: State<HostRuntime>,
-) -> Result<Value, HostError> {
+) -> Result<StartTurnResponse, HostError> {
     // Validation runs strictly before the backend; with the NotReadyBackend
     // default this answers the fixed host_not_ready error and fabricates no
-    // turn id and no streaming event.
+    // turn id and no streaming event. The success value is the closed
+    // `StartTurnResponse` contract (`{ "turnId": … }`); the raw request is
+    // never echoed back.
     start_turn_checked(&runtime, &session_id, &request)
 }
 
@@ -80,7 +86,7 @@ fn start_turn_checked(
     runtime: &HostRuntime,
     session_id: &str,
     request: &Value,
-) -> Result<Value, HostError> {
+) -> Result<StartTurnResponse, HostError> {
     validation::validate_start_turn_payload(session_id, request)?;
     runtime.backend().start_turn(session_id, request)
 }
@@ -93,7 +99,7 @@ pub fn agent_cancel_turn(
     session_id: String,
     turn_id: String,
     runtime: State<HostRuntime>,
-) -> Result<Value, HostError> {
+) -> Result<CancelTurnResponse, HostError> {
     cancel_turn_checked(&runtime, &session_id, &turn_id)
 }
 
@@ -101,7 +107,7 @@ fn cancel_turn_checked(
     runtime: &HostRuntime,
     session_id: &str,
     turn_id: &str,
-) -> Result<Value, HostError> {
+) -> Result<CancelTurnResponse, HostError> {
     validation::validate_session_id(session_id)?;
     validation::validate_turn_id(turn_id)?;
     runtime.backend().cancel_turn(session_id, turn_id)
@@ -141,17 +147,25 @@ mod tests {
     }
 
     impl crate::backend::HostBackend for RecordingBackend {
-        fn create_session(&self) -> Result<Value, HostError> {
+        fn create_session(&self) -> Result<CreateSessionResponse, HostError> {
             self.calls.lock().expect("lock").push("create_session");
             Err(self.error.clone())
         }
 
-        fn start_turn(&self, _session_id: &str, _request: &Value) -> Result<Value, HostError> {
+        fn start_turn(
+            &self,
+            _session_id: &str,
+            _request: &Value,
+        ) -> Result<StartTurnResponse, HostError> {
             self.calls.lock().expect("lock").push("start_turn");
             Err(self.error.clone())
         }
 
-        fn cancel_turn(&self, _session_id: &str, _turn_id: &str) -> Result<Value, HostError> {
+        fn cancel_turn(
+            &self,
+            _session_id: &str,
+            _turn_id: &str,
+        ) -> Result<CancelTurnResponse, HostError> {
             self.calls.lock().expect("lock").push("cancel_turn");
             Err(self.error.clone())
         }
