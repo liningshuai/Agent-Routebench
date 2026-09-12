@@ -160,6 +160,7 @@ const required = [
   "apps/desktop/src/ui.ts",
   "apps/desktop/src/browser-entry.ts",
   "apps/desktop/src/local-api-client.ts",
+  "apps/desktop/src/tauri-api-client.ts",
   "apps/desktop/public/index.html",
   "apps/desktop/public/styles.css",
   "docs/desktop.md",
@@ -194,6 +195,8 @@ const required = [
   "packages/local-agent-client/src/index.ts",
   "docs/local-agent-client.md",
   "docs/verification/task-16-report.md",
+  "docs/tauri.md",
+  "docs/verification/task-17-report.md",
   "tests/helpers/local-agent-client-fixtures.ts",
   "tests/task-16-local-agent-client.test.ts",
   "tests/task-16-local-agent-client-streaming.test.ts",
@@ -389,6 +392,12 @@ runScenario("task 16 shared Local Agent API client and Desktop loopback", [
   "tests/task-16-desktop-loopback-integration.test.ts",
 ]);
 
+runScenario("task 17 Tauri Desktop IPC bridge", [
+  "tests/task-17-tauri-bridge.test.ts",
+  "tests/task-17-tauri-bridge-security.test.ts",
+  "tests/task-17-tauri-bridge-cancellation.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -461,5 +470,9 @@ console.log(
     "incrementally, propagates AbortSignal, releases late responses and never sends",
     "authentication headers. Desktop's adapter is exercised against a real local",
     "127.0.0.1 Local Agent API server; no external network or provider is contacted.",
+    "Task 17 adds a dependency-injected Tauri-style invoke/listen bridge for the DesktopApiClient.",
+    "It validates IPC envelopes, filters concurrent session/turn events, sanitizes host errors,",
+    "and ends streams promptly on cancellation. No Tauri package, Rust host, provider call,",
+    "credential access or remote network is included.",
   ].join(" "),
 );

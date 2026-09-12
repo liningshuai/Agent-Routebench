@@ -23,4 +23,15 @@ export {
   createLoopbackDesktopApiClient,
   type LoopbackDesktopApiClientOptions,
 } from "./local-api-client.js";
+export {
+  TauriDesktopApiClient,
+  createTauriDesktopApiClient,
+  TAURI_COMMANDS,
+  TAURI_EVENTS,
+  type TauriDesktopApiClientOptions,
+  type TauriEvent,
+  type TauriInvoke,
+  type TauriListen,
+  type TauriUnlisten,
+} from "./tauri-api-client.js";
 export { renderDesktopPage } from "./render.js";

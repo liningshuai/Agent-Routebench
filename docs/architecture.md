@@ -5,6 +5,8 @@
 ```text
 Desktop (Task 15: Interactive UI, Task 14: @agent-workbench/desktop)
    |                         |
+   +-- Tauri IPC Bridge (Task 17) ----------------+
+   |                                             |
    +-- Shared Local Agent API Client (Task 16) --+
                                                |
 CLI (Task 13: @agent-workbench/cli) ------------+
@@ -22,7 +24,7 @@ Anthropic Messages   OpenAI-compatible
 
 ## 已完成层级
 
-截至 Task 16，以下层级已实现并通过测试：
+截至 Task 17，以下层级已实现并通过测试：
 
 - **Desktop Interactive UI**（Task 15）：`mountDesktopUi()`、响应式渲染、会话切换、取消按钮、草稿保留、卸载清理与浏览器入口
 - **Desktop**（Task 14: `@agent-workbench/desktop`）：Tauri-ready 基础层，状态管理、API 边界、安全 ViewModel
@@ -35,10 +37,11 @@ Anthropic Messages   OpenAI-compatible
 - **Session Persistence**（`packages/session-persistence`）：加密会话存储、AgentEvent 持久化
 - **Memory Store**（`@agent-workbench/agent-memory`）：进程内 Memory、确定性上下文压缩
 - **Shared Local Agent API Client**（Task 16: `@agent-workbench/local-agent-client`）：CLI 与 Desktop 共用的 loopback HTTP 客户端、NDJSON 解析与取消边界
+- **Tauri IPC Bridge**（Task 17: `TauriDesktopApiClient`）：将宿主注入的 `invoke` / `listen` 映射为 `DesktopApiClient`，校验 IPC 边界、过滤并发 turn 事件、处理取消与监听器释放
 
 未完成层级：
 
-- **Tauri 集成**：将交互式 UI 集成到 Tauri 应用框架中（基础已就绪）
+- **Tauri 原生宿主**：Rust `src-tauri` 项目、命令实现、权限配置、原生窗口/菜单/托盘与生产打包尚未接入。Task 17 已完成 TypeScript bridge contract MVP。
 
 ## 契约层与依赖方向
 
@@ -613,6 +616,23 @@ Agent Runtime / Future API
 - 依赖方向：`desktop → local-agent-api (types only) → agent-core`。
 - 详见 [Desktop](desktop.md)。
 
+### Task 17（已完成：TypeScript IPC Bridge MVP）
+
+Task 17 在不引入 `@tauri-apps/api` 或 Rust 运行时依赖的前提下，完成了
+Desktop 与 Tauri 宿主之间的可测试通信边界：
+
+- `TauriDesktopApiClient` 只使用宿主注入的 `invoke` / `listen`，固定映射
+  `agent_health`、`agent_create_session`、`agent_start_turn`、`agent_cancel_turn`
+  与 `agent_turn_event`。
+- 对 Session、Turn request、Turn response 和 AgentEvent 做边界校验；只向当前
+  session/turn 转发事件，并将错误消息折叠为固定安全文案。
+- 支持流式事件、并发隔离、预取消、中途取消、监听器清理和迟到 Promise 消费；
+  不等待悬挂的宿主清理操作。
+- 不读取 Provider、CredentialStore 或持久化层，不生成认证头，不访问网络；
+  真实 Tauri host 只需在应用层注入官方 `invoke` / `listen`。
+- 28 个聚焦测试覆盖 contract、security、streaming、cancellation 和 class 实例边界。
+- 详见 [Tauri Desktop IPC Bridge](tauri.md)。
+
 
 ### Task 16（已完成）
 
@@ -635,7 +655,7 @@ Desktop 的 loopback 适配器：
 - `AbortSignal` 贯穿 fetch、body reader 与 NDJSON reader；迟到 Promise 会被消费，
   迟到响应体会被释放，不等待悬挂清理操作。
 - Desktop 适配器通过真实本机 `127.0.0.1` Local Agent API 做回环集成测试，
-  仍不连接外部网络，也不加入 Tauri IPC。
+  仍不连接外部网络；Task 17 另提供 Tauri IPC 适配器，两者可按宿主环境注入。
 - 依赖方向：`cli → local-agent-client`、`desktop → local-agent-client`；共享客户端
   只依赖 `agent-core` 与 `local-agent-api` 的契约类型。
 - 详见 [共享 Local Agent API Client](local-agent-client.md)。
@@ -643,5 +663,5 @@ Desktop 的 loopback 适配器：
 
 ### 后续任务（未实现）
 
-CredentialStore / OS Keychain 持久化、审批 UI 与自动批准策略、Tauri 原生应用壳与 IPC、
+CredentialStore / OS Keychain 持久化、审批 UI 与自动批准策略、Tauri Rust 原生宿主与生产打包、
 向量搜索、真实模型摘要调用等。

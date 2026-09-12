@@ -4,10 +4,11 @@
 
 The `@agent-workbench/desktop` package provides a Tauri-ready Desktop foundation with interactive UI, testable state management, dependency injection, and strict security boundaries for building the Agent Workbench desktop application.
 
-**Current Status:** Interactive UI and the Task 16 loopback adapter are implemented. The
-Desktop package uses `createLoopbackDesktopApiClient()` to connect to the Local Agent
-API through the shared `@agent-workbench/local-agent-client` package. The Desktop-focused
-Task 14/15 suite remains 196 tests; Task 16 adds a real local loopback integration suite.
+**Current Status:** Interactive UI, the Task 16 loopback adapter, and the Task 17
+dependency-injected Tauri IPC bridge are implemented. The Desktop package uses
+`createLoopbackDesktopApiClient()` for local development and
+`createTauriDesktopApiClient({ invoke, listen })` when hosted by Tauri. The native
+Rust/Tauri host and production packaging remain future work.
 
 ## Architecture
 
@@ -285,14 +286,21 @@ controller.cancelTurn(sessionId);
 
 ## Future Work
 
-### Tauri Integration
+### Tauri Integration (Task 17 bridge MVP)
 
-Desktop package is designed for Tauri but not yet integrated:
+The TypeScript-side IPC contract is now implemented without adding a Tauri package
+dependency. `createTauriDesktopApiClient({ invoke, listen })` adapts the injected host
+functions to the existing `DesktopApiClient`; `mountDesktopUi()` can use the resulting
+client in the renderer. See [Tauri Desktop IPC Bridge](tauri.md) for the fixed command
+and event names.
 
-1. **IPC DesktopApiClient:** Implement `DesktopApiClient` using Tauri IPC commands
-2. **Renderer Process:** Use `mountDesktopUi()` in Tauri's frontend (already interactive)
-3. **Bundle Integration:** Tauri build system consumes compiled ESM output from `dist/`
-4. **Native Features:** File dialogs, system tray, menu bar via Tauri APIs
+The following host work remains outside this package:
+
+1. **Native commands:** implement the Rust `src-tauri` handlers for the fixed commands
+2. **Permissions and wiring:** configure Tauri capabilities and inject official `invoke`
+   and `listen` functions from the frontend
+3. **Bundle integration:** consume the compiled ESM output from the Tauri build
+4. **Native features:** add file dialogs, system tray, menu bar and other host APIs
 
 ### Test Coverage Improvements
 

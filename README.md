@@ -4,6 +4,16 @@
 
 ## 当前阶段
 
+**Task 17：Tauri Desktop IPC Bridge MVP**。在 Task 16 的共享 loopback 客户端基础上，增加一个不绑定具体 Tauri 版本的宿主通信适配层：
+
+- `TauriDesktopApiClient`：将宿主注入的 `invoke` / `listen` 映射为现有 `DesktopApiClient`
+- 固定的 health、create session、start turn、cancel turn 命令，以及固定的 turn event 通道
+- 事件按 `sessionId` / `turnId` 隔离，终止事件后停止继续消费
+- AbortSignal 贯穿监听注册、宿主命令和事件等待；取消不等待悬挂 Promise，迟到清理错误被消费
+- IPC 响应、Session、Turn request 与事件进行边界校验；宿主异常折叠为固定 Desktop 错误
+- 不加入 `@tauri-apps/api` 或 Rust 运行时依赖，真实 Tauri host 只需注入官方 `invoke` / `listen`
+- 不读取凭据、不访问 Provider、不连接远程网络；Task 17 只交付可测试的 IPC contract adapter
+
 **Task 16：共享 Local Agent API Client 与 Desktop 回环集成**。在 Task 15 的交互式 Desktop UI 和 Task 13 CLI 基础上，抽取统一的 loopback HTTP 客户端：
 
 - `@agent-workbench/local-agent-client`：CLI 与 Desktop 共用的 Local Agent API 客户端
@@ -113,7 +123,7 @@
 - shell / 文件 / 网络工具（runtime 不提供任何默认工具，也不具备这些能力）
 - 审批 UI 与自动批准策略
 - 审批决策持久化与 “remember this decision”
-- Tauri 原生应用壳与 IPC 集成（Desktop UI 与 loopback 客户端基础已完成）
+- 完整 Tauri 原生应用打包、Rust host command 实现与生产 IPC 部署（Task 17 仅完成 TypeScript bridge contract）
 - CredentialStore secret 持久化与 OS Keychain
 - 持久化 Memory、向量搜索、真实模型摘要调用
 
@@ -126,6 +136,7 @@
 - Memory Store 与上下文压缩（Task 12）
 - Node CLI for Local Agent API（Task 13）
 - Desktop Renderer Shell / Tauri-ready Desktop 基础层（Task 14）
+- Tauri IPC Bridge contract MVP（Task 17）
 
 所有测试默认离线运行，不依赖外部网络服务；Task 9/16 的集成测试只连接临时的
 本机 loopback 服务。OpenAI-compatible 在本阶段**只覆盖
@@ -173,6 +184,7 @@ pnpm evals:deterministic
 - [HTTP 传输与凭据边界](docs/http-transport.md)
 - [重试、故障转移与 Provider 候选](docs/resilience.md)
 - [Tool Policy、审批闸门与安全执行边界](docs/tool-policy.md)
+- [Tauri Desktop IPC Bridge](docs/tauri.md)
 - [本地配置持久化](docs/local-persistence.md)
 - [Local Agent API](docs/local-agent-api.md)
 - [Provider Discovery](docs/provider-discovery.md)
