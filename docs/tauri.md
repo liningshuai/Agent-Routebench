@@ -174,10 +174,16 @@ unchanged. Task 20 and Task 21 have not been started.
 ## HostBackend / HostRuntime
 
 - `src-tauri/src/backend.rs` defines `pub trait HostBackend: Send + Sync` with
-  exactly three methods (`create_session`, `start_turn`, `cancel_turn`), all
-  returning `Result<serde_json::Value, HostError>`. Because the error type is
-  the fixed contract, dynamic exception text, paths or URLs are
-  unrepresentable at the boundary by construction.
+  exactly three methods (`create_session`, `start_turn`, `cancel_turn`). All
+  three return command-specific typed responses —
+  `Result<CreateSessionResponse, HostError>`,
+  `Result<StartTurnResponse, HostError>` and
+  `Result<CancelTurnResponse, HostError>` (see the typed success response
+  section below). Because both the error type and the success types are
+  fixed contracts, dynamic exception text, paths or URLs are
+  unrepresentable at the boundary by construction. The raw
+  `serde_json::Value` type appears only as the already-validated
+  `agent_start_turn` request input; it is never an open success output.
 - The production default is `NotReadyBackend`: it answers every operation
   with the fixed `host_not_ready` error and fabricates nothing.
 - `src-tauri/src/runtime.rs` defines `HostRuntime { backend:

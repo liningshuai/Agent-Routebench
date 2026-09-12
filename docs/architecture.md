@@ -728,3 +728,24 @@ Task 19 在 Task 18 的原生壳层内建立可注入、可测试、可替换的
 `invalid_response` 错误拒绝空 id / 空 turnId / 非有限时间 / 非法 activeTurnId；
 `NotReadyBackend` 行为不变；Task 21 未来只能通过该 typed response contract 接入
 真实 Backend。当前仍无真实模型调用、Provider 接入或 CredentialStore 读取。
+
+### Task 20（已完成：Loopback Local Agent API Host 入口与生命周期）
+
+新增独立 workspace app `@agent-workbench/local-agent-host`，复用 Task 9 服务器：
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| 参数校验 | `apps/local-agent-host/src/validation.ts` | host 仅 loopback（`127.0.0.1`/`localhost`）、port 1–65535、runner 形状检查（literal/null-proto/class） |
+| 错误契约 | `apps/local-agent-host/src/errors.ts` | 七个固定错误码与固定消息，不回显 host/port/底层异常 |
+| 宿主 | `apps/local-agent-host/src/host.ts` | `createLocalAgentHost()` 生命周期容器 + `NotReadyLocalAgentRunner` |
+| Node 入口 | `apps/local-agent-host/src/main.ts` | `--host/--port` 解析、SIGINT/SIGTERM 可注入注册、返回退出码而非 `process.exit` |
+
+边界：
+
+- 只监听 loopback；无 CORS、无远程监听、无 outbound HTTP、无子进程、无环境变量读取。
+- 默认 Runner 不伪造 Session/Turn/模型文本/tool_call/usage/completed；Turn 由既有
+  服务器折叠为固定 `runner_error` 事件。
+- 端点与错误契约保持 Task 9 原样；Task 16 客户端可直接访问新 Host。
+- 仍然没有真实 Agent Backend / 真实模型调用 / Provider 接入；Task 21 才负责完整组装。
+- 同时修正了 `docs/tauri.md` 中 Task 19 的旧 `Result<serde_json::Value, HostError>`
+  描述（现为 typed response 表述）。

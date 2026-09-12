@@ -4,9 +4,20 @@
 
 ## 当前阶段
 
+**Task 20：Loopback Local Agent API Host 入口与生命周期**。新增独立 workspace app
+`@agent-workbench/local-agent-host`，复用 Task 9 服务器实现提供仅回环的 Local Agent API 宿主：
+
+- 参数校验：host 仅允许 `127.0.0.1` / `localhost`，port 必须是 1–65535 整数；错误固定、不回显输入
+- 生命周期 created → starting → running → closing → closed：`start()` 一次成功、并发 start 只建一个服务器、`close()` 幂等、`address()` 在启动前/关闭后为 undefined
+- 默认 `NotReadyLocalAgentRunner`：不伪造 Session、Turn、模型文本、tool_call、usage 或 completed；Turn 调用由既有服务器折叠为固定 `runner_error`
+- 通过 `createLocalAgentApiServer()` 依赖注入复用既有实现；端点与错误契约保持 Task 9 原样；Task 16 客户端可直接访问
+- 无环境变量读取、无 CredentialStore、无子进程、无 outbound HTTP；SIGINT/SIGTERM 经可注入钩子注册且幂等关闭
+- 仍然没有真实 Agent Backend / 真实模型调用 / Provider 接入；Task 21 才负责完整组装
+## 当前阶段
+
 **Task 19：Native Host Runtime Boundary 与可复现构建加固**。在 Task 18 的原生壳层上引入可注入的 Backend 边界，并把 Cargo 构建输出固化到仓库根（alpha / early development）：
 
-- `HostBackend` trait（`Send + Sync`）：`create_session` / `start_turn` / `cancel_turn` 三个方法统一返回 `Result<serde_json::Value, HostError>`，错误类型即固定契约，动态异常文本在类型层面无法穿越边界
+- `HostBackend` trait（`Send + Sync`）：`create_session` / `start_turn` / `cancel_turn` 三个方法返回 command-specific typed response（错误侧为固定 `HostError`，成功侧为封闭响应类型），动态异常文本与任意字段在类型层面无法穿越边界
 - 生产默认实现 `NotReadyBackend`：三个操作统一返回固定 `host_not_ready`；不伪造 Session、Turn、Turn ID 或事件
 - `HostRuntime { backend: Arc<dyn HostBackend> }`：由 Tauri State 管理（`.manage(HostRuntime::not_ready())`），每个 App 实例独享；`with_backend(Arc)` 为显式注入点，仅测试与未来组装使用；无全局可变状态、无单例
 - 委托顺序固定：接收参数 → 校验（敏感字段 → 未知字段 → 结构）→ 失败立即返回固定错误（不触碰 Backend）→ 校验通过才委托 `runtime.backend()`；`agent_health` 不接收 State、不读取 Backend

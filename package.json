@@ -17,7 +17,9 @@
     "verify:layout": "node scripts/verify-layout.mjs",
     "build:cli": "pnpm --filter @agent-workbench/cli build",
     "build:desktop": "node scripts/build-desktop.mjs",
-    "cli": "pnpm --filter @agent-workbench/cli start"
+    "cli": "pnpm --filter @agent-workbench/cli start",
+    "build:local-agent-host": "corepack pnpm --filter @agent-workbench/local-agent-host build",
+    "local-agent-host": "corepack pnpm --filter @agent-workbench/local-agent-host start"
   },
   "devDependencies": {
     "@agent-workbench/agent-contracts": "workspace:*",

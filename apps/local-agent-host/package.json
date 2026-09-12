@@ -1,0 +1,26 @@
+{
+  "name": "@agent-workbench/local-agent-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Loopback-only entry point that hosts the existing Local Agent API server",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./main": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@agent-workbench/agent-core": "workspace:*",
+    "@agent-workbench/local-agent-api": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
