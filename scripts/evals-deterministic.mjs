@@ -9,13 +9,14 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 // Deterministic offline eval entry.
 //
 // Stage 1 verifies the expected layout.
-// Stage 2 actually *runs* the offline Task 3 protocol scenario and the offline
-// Task 4 routed HTTP scenario, and propagates their exit codes so this entry can
-// never print "passed" without exercising behaviour.
+// Stage 2 actually runs the offline scenarios for Tasks 3–16 and propagates
+// their exit codes so this entry can never print "passed" without exercising
+// behaviour.
 //
-// Everything here is offline: the routed HTTP transport is always driven by an
-// injected fake client, so no provider is contacted and no real network access
-// happens. No credential is persisted anywhere.
+// Provider-facing scenarios are offline: routed transport and discovery are
+// driven by injected fakes. Task 9 and Task 16 may bind/connect to temporary
+// 127.0.0.1 servers only; no external provider or remote network is contacted.
+// No credential is persisted anywhere.
 
 const required = [
   "package.json",
@@ -158,6 +159,7 @@ const required = [
   "apps/desktop/src/render.ts",
   "apps/desktop/src/ui.ts",
   "apps/desktop/src/browser-entry.ts",
+  "apps/desktop/src/local-api-client.ts",
   "apps/desktop/public/index.html",
   "apps/desktop/public/styles.css",
   "docs/desktop.md",
@@ -182,6 +184,22 @@ const required = [
   "tests/task-15-desktop-ui-subscribe.test.ts",
   "tests/task-15-desktop-ui-lifecycle.test.ts",
   "tests/task-15-desktop-ui-entry.test.ts",
+  "packages/local-agent-client/package.json",
+  "packages/local-agent-client/tsconfig.json",
+  "packages/local-agent-client/src/types.ts",
+  "packages/local-agent-client/src/errors.ts",
+  "packages/local-agent-client/src/url.ts",
+  "packages/local-agent-client/src/ndjson.ts",
+  "packages/local-agent-client/src/client.ts",
+  "packages/local-agent-client/src/index.ts",
+  "docs/local-agent-client.md",
+  "docs/verification/task-16-report.md",
+  "tests/helpers/local-agent-client-fixtures.ts",
+  "tests/task-16-local-agent-client.test.ts",
+  "tests/task-16-local-agent-client-streaming.test.ts",
+  "tests/task-16-local-agent-client-security.test.ts",
+  "tests/task-16-local-agent-client-cancellation.test.ts",
+  "tests/task-16-desktop-loopback-integration.test.ts",
   "tests/helpers/adapter-fixtures.ts",
   "tests/helpers/http-fixtures.ts",
   "tests/helpers/runtime-fixtures.ts",
@@ -363,6 +381,14 @@ runScenario("task 15 desktop interactive UI", [
   "tests/task-15-desktop-ui-entry.test.ts",
 ]);
 
+runScenario("task 16 shared Local Agent API client and Desktop loopback", [
+  "tests/task-16-local-agent-client.test.ts",
+  "tests/task-16-local-agent-client-streaming.test.ts",
+  "tests/task-16-local-agent-client-security.test.ts",
+  "tests/task-16-local-agent-client-cancellation.test.ts",
+  "tests/task-16-desktop-loopback-integration.test.ts",
+]);
+
 console.log(
   [
     "evals:deterministic passed.",
@@ -376,8 +402,8 @@ console.log(
     "Task 5 adds ordered provider candidates, a bounded retry and an ordered failover,",
     "verified offline through the same injected fake client and an injected wait;",
     "a retry or a switch is refused once an attempt has produced visible output.",
-    "No real provider calls. No real network access. Authentication headers are exercised",
-    "only by the injected fake HTTP client; nothing is sent to a real provider.",
+    "No real provider calls. No external network access; Task 9 and Task 16 use local loopback only.",
+    "Provider-facing HTTP is exercised only through injected fake clients; nothing is sent to a real provider.",
     "No persisted credentials.",
     "Task 6 adds a bounded multi-turn agent loop with an injected ToolExecutor boundary:",
     "the runtime ships no tool at all, so the offline scenarios drive it with an injected",
@@ -430,5 +456,10 @@ console.log(
     "Local Agent API only through the injected interface; it never directly touches",
     "model-gateway, provider-registry, credential-store, session-persistence, or agent-runtime.",
     "No real provider, no network, no persisted credentials.",
+    "Task 16 adds the shared loopback-only Local Agent API client used by both CLI",
+    "and Desktop. It validates fixed API envelopes, parses bounded fatal-UTF-8 NDJSON",
+    "incrementally, propagates AbortSignal, releases late responses and never sends",
+    "authentication headers. Desktop's adapter is exercised against a real local",
+    "127.0.0.1 Local Agent API server; no external network or provider is contacted.",
   ].join(" "),
 );

@@ -4,7 +4,10 @@
 
 The `@agent-workbench/desktop` package provides a Tauri-ready Desktop foundation with interactive UI, testable state management, dependency injection, and strict security boundaries for building the Agent Workbench desktop application.
 
-**Current Status:** Interactive UI implemented in Task 15 with 57 focused tests across 9 files, building on the Task 14 foundation and its 139 Desktop tests.
+**Current Status:** Interactive UI and the Task 16 loopback adapter are implemented. The
+Desktop package uses `createLoopbackDesktopApiClient()` to connect to the Local Agent
+API through the shared `@agent-workbench/local-agent-client` package. The Desktop-focused
+Task 14/15 suite remains 196 tests; Task 16 adds a real local loopback integration suite.
 
 ## Architecture
 
@@ -20,6 +23,10 @@ The `@agent-workbench/desktop` package provides a Tauri-ready Desktop foundation
 3. **State Management:** Immutable state with defensive copying ensures predictable behavior and prevents accidental mutations.
 
 4. **Cancellation:** AbortSignal-based cancellation for turn submission enables responsive UI and resource cleanup.
+
+5. **Shared transport boundary:** Desktop does not implement its own HTTP client. The
+   loopback adapter delegates to the shared client, which owns URL validation, JSON
+   envelope validation, NDJSON parsing, limits, error mapping and cancellation.
 
 ### Core Components
 
@@ -229,6 +236,23 @@ directly.
 - Send button (disabled when draft empty, enabled when draft has content)
 - Cancel button during submission (preserves draft on cancel)
 - Streaming event display
+
+### Local Agent API adapter (Task 16)
+
+```typescript
+import { createLoopbackDesktopApiClient, mountDesktopUi } from "@agent-workbench/desktop";
+
+const client = createLoopbackDesktopApiClient({
+  baseUrl: "http://127.0.0.1:4317",
+});
+const ui = mountDesktopUi(document.getElementById("app")!, client);
+```
+
+The adapter accepts only loopback HTTP URLs and uses the runtime's injected or native
+`fetch`. It sends no authentication headers and exposes no Provider, route or
+credential data to the renderer. The shared client rejects malformed JSON/NDJSON,
+invalid UTF-8, oversized responses and streams without a terminal event. Cancellation
+does not wait for a pending request to settle.
 - XSS protection with HTML escaping
 
 ### Controller API (Task 14)
@@ -310,6 +334,7 @@ apps/desktop/
 │   ├── view-model.ts      # ViewModel, escapeHtml, rendering
 │   ├── render.ts          # Pure renderer: renderDesktopPage(state)
 │   ├── ui.ts              # Interactive UI: mountDesktopUi(container, client)
+│   ├── local-api-client.ts # Task 16 adapter over shared loopback client
 │   └── browser-entry.ts   # Host-injected browser bootstrap
 ├── dist/                  # Compiled JavaScript output (ESM)
 │   ├── controller.js
@@ -334,3 +359,4 @@ apps/desktop/
 - [Task 14 Verification Report](./verification/task-14-report.md)
 - [Task 14 Mutation Testing](./verification/task-14-mutations.md)
 - [Local Agent API](./local-agent-api.md)
+- [Shared Local Agent API Client](./local-agent-client.md)

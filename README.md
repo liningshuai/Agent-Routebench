@@ -4,6 +4,18 @@
 
 ## 当前阶段
 
+**Task 16：共享 Local Agent API Client 与 Desktop 回环集成**。在 Task 15 的交互式 Desktop UI 和 Task 13 CLI 基础上，抽取统一的 loopback HTTP 客户端：
+
+- `@agent-workbench/local-agent-client`：CLI 与 Desktop 共用的 Local Agent API 客户端
+- 严格 loopback URL 校验：只允许 `http://127.0.0.1` 与 `http://localhost`
+- 统一 Session / events envelope 校验、固定错误码与错误消息
+- 有界 NDJSON 增量解析：fatal UTF-8、精确事件校验、终止事件与行/总字节限制
+- AbortSignal 贯穿 fetch、响应体读取和流解析；取消不等待悬挂 Promise，迟到响应会被释放
+- Desktop `createLoopbackDesktopApiClient()`：将共享客户端接入现有 `DesktopApiClient`，不接触模型/Provider/凭据层
+- CLI 的 API client 与 NDJSON parser 改为共享实现，保留原有调用兼容性
+- 使用真实的本机 `127.0.0.1` Local Agent API 做 Desktop 回环集成验证；不访问外部网络
+- Task 16 聚焦测试与全量测试、构建、类型检查、安全扫描和确定性评测均在交付前通过
+
 **Task 15：Desktop Interactive UI**。在 Task 14 基础上新增交互式用户界面，并完成首轮交付修复：
 
 - 完整交互式 UI：`mountDesktopUi()` 挂载函数，DOM 事件监听，响应式渲染
@@ -101,7 +113,7 @@
 - shell / 文件 / 网络工具（runtime 不提供任何默认工具，也不具备这些能力）
 - 审批 UI 与自动批准策略
 - 审批决策持久化与 “remember this decision”
-- Tauri 桌面应用与 UI 渲染（Desktop 基础层已在 Task 14 完成）
+- Tauri 原生应用壳与 IPC 集成（Desktop UI 与 loopback 客户端基础已完成）
 - CredentialStore secret 持久化与 OS Keychain
 - 持久化 Memory、向量搜索、真实模型摘要调用
 
@@ -115,7 +127,8 @@
 - Node CLI for Local Agent API（Task 13）
 - Desktop Renderer Shell / Tauri-ready Desktop 基础层（Task 14）
 
-所有测试默认离线运行，不依赖外部网络服务。OpenAI-compatible 在本阶段**只覆盖
+所有测试默认离线运行，不依赖外部网络服务；Task 9/16 的集成测试只连接临时的
+本机 loopback 服务。OpenAI-compatible 在本阶段**只覆盖
 Chat Completions 的文本与 function tool 子集**，不代表支持 Responses API、
 Codex 登录或所有 GPT 模型。
 
@@ -165,6 +178,7 @@ pnpm evals:deterministic
 - [Provider Discovery](docs/provider-discovery.md)
 - [Session 加密持久化](docs/session-persistence.md)
 - [Node CLI for Local Agent API](docs/cli.md)
+- [共享 Local Agent API Client](docs/local-agent-client.md)
 - [Desktop Renderer Shell](docs/desktop.md)
 - [许可证边界](docs/licensing.md)
 

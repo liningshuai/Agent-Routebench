@@ -4,10 +4,12 @@
 
 ```text
 Desktop (Task 15: Interactive UI, Task 14: @agent-workbench/desktop)
-   |
-CLI (Task 13: @agent-workbench/cli)
-   |
-Local Agent API
+   |                         |
+   +-- Shared Local Agent API Client (Task 16) --+
+                                               |
+CLI (Task 13: @agent-workbench/cli) ------------+
+                                               |
+                                        Local Agent API
    |
 Agent Runtime
    |
@@ -20,7 +22,7 @@ Anthropic Messages   OpenAI-compatible
 
 ## 已完成层级
 
-截至 Task 15，以下层级已实现并通过测试：
+截至 Task 16，以下层级已实现并通过测试：
 
 - **Desktop Interactive UI**（Task 15）：`mountDesktopUi()`、响应式渲染、会话切换、取消按钮、草稿保留、卸载清理与浏览器入口
 - **Desktop**（Task 14: `@agent-workbench/desktop`）：Tauri-ready 基础层，状态管理、API 边界、安全 ViewModel
@@ -32,6 +34,7 @@ Anthropic Messages   OpenAI-compatible
 - **Provider Registry**（`@agent-workbench/provider-registry`）：Provider / Route 配置核心、凭据引用
 - **Session Persistence**（`packages/session-persistence`）：加密会话存储、AgentEvent 持久化
 - **Memory Store**（`@agent-workbench/agent-memory`）：进程内 Memory、确定性上下文压缩
+- **Shared Local Agent API Client**（Task 16: `@agent-workbench/local-agent-client`）：CLI 与 Desktop 共用的 loopback HTTP 客户端、NDJSON 解析与取消边界
 
 未完成层级：
 
@@ -564,8 +567,8 @@ Agent Runtime / Future API
 
 | 组件 | 位置 | 职责 |
 |------|------|------|
-| API 客户端 | `packages/cli/src/api-client.ts` | `LocalAgentApiClient`：Session CRUD、流式轮次提交、取消 |
-| NDJSON 解析 | `packages/cli/src/ndjson-parser.ts` | UTF-8 fatal 验证、尺寸限制、终止事件校验 |
+| API 客户端 | `packages/local-agent-client/src/client.ts` | `LocalAgentApiClient`：Session CRUD、流式轮次提交、取消；CLI 通过兼容层导出 |
+| NDJSON 解析 | `packages/local-agent-client/src/ndjson.ts` | UTF-8 fatal 验证、尺寸限制、终止事件校验；CLI 通过兼容层导出 |
 | 命令实现 | `packages/cli/src/commands/*.ts` | 8 种命令：health、create-session、get-session、list-events、cancel、run-turn、stream-turn、version |
 | 安全边界 | `packages/cli/src/security.ts` | 仅 loopback URL、拒绝 14 种敏感参数、固定错误消息 |
 | 注入式 IO | `packages/cli/src/io.ts` | CliIo 接口：stdin、stdout、stderr、环境变量 |
@@ -579,7 +582,7 @@ Agent Runtime / Future API
 - 固定错误消息，不泄露 URL、响应 body、路径或异常详情。
 - 完整取消支持：AbortSignal 贯穿全程、SIGINT/SIGTERM 信号处理器。
 - 131 个测试（128 个离线测试 + 3 个集成测试），依赖注入设计（CliIo、CliRuntime、fetch）。
-- 依赖方向：`cli → local-agent-api → agent-core`。
+- 依赖方向：`cli → local-agent-client`，共享客户端只依赖 Local Agent API / Agent Core 契约。
 - 详见 [CLI](cli.md)。
 
 
@@ -611,7 +614,34 @@ Agent Runtime / Future API
 - 详见 [Desktop](desktop.md)。
 
 
+### Task 16（已完成）
+
+已抽取 CLI 与 Desktop 共用的 `@agent-workbench/local-agent-client`，并将其接入
+Desktop 的 loopback 适配器：
+
+| 组件 | 位置 | 职责 |
+|------|------|------|
+| 共享客户端 | `packages/local-agent-client/src/client.ts` | health、Session、事件查询、流式 turn、取消 |
+| 共享 NDJSON | `packages/local-agent-client/src/ndjson.ts` | fatal UTF-8、精确事件校验、终止事件与字节限制 |
+| URL / 错误边界 | `packages/local-agent-client/src/url.ts`、`errors.ts` | loopback URL、路径编码、固定错误码与消息 |
+| Desktop 适配器 | `apps/desktop/src/local-api-client.ts` | 将共享客户端映射为 `DesktopApiClient` |
+
+边界：
+
+- CLI 与 Desktop 不再各自维护 HTTP 客户端和 NDJSON 实现。
+- 共享客户端只允许 `http://127.0.0.1` 与 `http://localhost`，不发送认证头，
+  不访问 Provider、CredentialStore 或模型网关。
+- HTTP 响应体有界读取；NDJSON 增量解析且拒绝非法 UTF-8、超限、非法事件和缺失终止事件。
+- `AbortSignal` 贯穿 fetch、body reader 与 NDJSON reader；迟到 Promise 会被消费，
+  迟到响应体会被释放，不等待悬挂清理操作。
+- Desktop 适配器通过真实本机 `127.0.0.1` Local Agent API 做回环集成测试，
+  仍不连接外部网络，也不加入 Tauri IPC。
+- 依赖方向：`cli → local-agent-client`、`desktop → local-agent-client`；共享客户端
+  只依赖 `agent-core` 与 `local-agent-api` 的契约类型。
+- 详见 [共享 Local Agent API Client](local-agent-client.md)。
+
+
 ### 后续任务（未实现）
 
-CredentialStore / OS Keychain 持久化、审批 UI 与自动批准策略、
-Tauri UI Renderer、向量搜索、真实模型摘要调用等。
+CredentialStore / OS Keychain 持久化、审批 UI 与自动批准策略、Tauri 原生应用壳与 IPC、
+向量搜索、真实模型摘要调用等。

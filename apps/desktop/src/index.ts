@@ -19,4 +19,8 @@ export {
   bootstrapDesktopUiFromDocument,
   DESKTOP_API_CLIENT_GLOBAL,
 } from "./browser-entry.js";
+export {
+  createLoopbackDesktopApiClient,
+  type LoopbackDesktopApiClientOptions,
+} from "./local-api-client.js";
 export { renderDesktopPage } from "./render.js";

@@ -1,6 +1,8 @@
 # Node CLI for Local Agent API
 
-`@agent-workbench/cli` 是 Local Agent API 的官方 Node.js 命令行客户端。提供类型安全的 API 封装、NDJSON 流式事件解析、严格的安全边界与完整的错误处理。
+`@agent-workbench/cli` 是 Local Agent API 的官方 Node.js 命令行客户端。命令编排仍在
+CLI 包内，但 HTTP API 封装和 NDJSON 流式解析自 Task 16 起由
+`@agent-workbench/local-agent-client` 统一提供，避免 Desktop 与 CLI 出现两套协议实现。
 
 ## 设计目标
 
@@ -23,10 +25,17 @@ apps/cli/src/
 ├── main.ts               # 命令执行编排，stdout/stderr 路由
 ├── cli.ts                # 命令路由，注入 CliIo / CliRuntime
 ├── args.ts               # 参数解析与安全验证
-├── api-client.ts         # LocalAgentApiClient，类型安全的 HTTP 客户端
-├── ndjson.ts             # NDJSON 流式解析器，UTF-8 fatal、尺寸限制、终止事件校验
+├── api-client.ts         # 共享 LocalAgentApiClient 的 CLI 兼容导出
+├── ndjson.ts             # 共享 NDJSON 解析器的 CLI 兼容导出
 └── errors.ts             # 固定错误码与消息，7 种安全错误
 ```
+
+共享实现位于 `packages/local-agent-client/src/`。CLI 保留原有构造函数和导入路径，
+因此既有命令与测试无需改写；Desktop 通过自己的 loopback adapter 使用同一实现。
+
+共享客户端的安全约束包括：仅 loopback URL、无认证头、固定错误消息、fatal UTF-8、
+精确 AgentEvent 校验、NDJSON 行/总字节上限，以及可取消且不等待迟到网络 Promise 的
+响应处理。共享客户端不访问 Provider Registry、CredentialStore 或 Model Gateway。
 
 ### 数据流
 
