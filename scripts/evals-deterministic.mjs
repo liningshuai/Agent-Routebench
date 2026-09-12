@@ -576,6 +576,6 @@ console.log(
     "fixed host_not_ready error; no real backend, provider, model call, credential store or",
     "network exists yet. Cargo build output is pinned to the repository root target/ through",
     ".cargo/config.toml, so apps/desktop/src-tauri/target never reappears and the security",
-    "scan stays reproducible. Task 20 and Task 21 have not been started.",
+    "scan stays reproducible. Task 20 is complete; Task 21 has not been started.",
   ].join(" "),
 );

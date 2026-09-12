@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
   createLocalAgentHost,
@@ -150,5 +151,25 @@ describe("Task 20: default not-ready runner", () => {
     } finally {
       await dispose();
     }
+  });
+});
+
+describe("Task 20: current-state documentation", () => {
+  test("does not claim that the completed host task has not started", () => {
+    const tauriDocumentation = readFileSync(new URL("../docs/tauri.md", import.meta.url), "utf8");
+    const deterministicEvaluation = readFileSync(
+      new URL("../scripts/evals-deterministic.mjs", import.meta.url),
+      "utf8",
+    );
+    const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+
+    expect(tauriDocumentation).not.toContain("Task 20 and Task 21 have not been started.");
+    expect(tauriDocumentation).toContain("Task 20 is now complete");
+    expect(tauriDocumentation).toContain("Task 21 has not been started");
+    expect(deterministicEvaluation).not.toContain("Task 20 and Task 21 have not been started.");
+    expect(deterministicEvaluation).toContain("Task 20 is complete");
+    expect(deterministicEvaluation).toContain("Task 21 has not been started");
+    expect(readme).toContain("在 Task 19 检查点 Task 20/21 尚未开始");
+    expect(readme).toContain("当前 Task 20 已完成，Task 21 待开始");
   });
 });

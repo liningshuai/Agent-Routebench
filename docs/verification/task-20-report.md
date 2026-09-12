@@ -67,7 +67,7 @@ Task 9 服务器折叠为固定 `runner_error` 事件（消息 `"Agent runner fa
 - `apps/local-agent-host/package.json`、`tsconfig.json`
 - `apps/local-agent-host/src/types.ts`、`errors.ts`、`validation.ts`、`host.ts`、`main.ts`、`index.ts`
 - `tests/helpers/local-agent-host-fixtures.ts`
-- `tests/task-20-local-agent-host.test.ts`（13）
+- `tests/task-20-local-agent-host.test.ts`（14）
 - `tests/task-20-local-agent-host-security.test.ts`（10）
 - `tests/task-20-local-agent-host-lifecycle.test.ts`（14）
 - `tests/task-20-local-agent-host-integration.test.ts`（10）
@@ -83,8 +83,8 @@ Task 9 服务器折叠为固定 `runner_error` 事件（消息 `"Agent runner fa
 - **Red**（实现前）：`corepack pnpm test tests/task-20-*.test.ts` 退出码 1，
   `4 failed (4)` 套件全部收集失败：`Cannot find module
   '../apps/local-agent-host/src/index.js'` —— 失败由能力缺失直接导致。
-- **Green**：实现后聚焦测试 47 passed；Task 9（65）/ Task 13（131）/ Task 16（60）
-  回归全部通过；全量 84 文件 / 1633 测试通过。
+- **Green**：实现后聚焦测试 48 passed；Task 9（65）/ Task 13（131）/ Task 16（60）
+  回归全部通过；全量 84 文件 / 1634 测试通过。
 
 ## 6. 受控变异（8 项，全部执行并恢复）
 
@@ -100,7 +100,7 @@ Task 9 服务器折叠为固定 `runner_error` 事件（消息 `"Agent runner fa
 | 8 | 信号处理跳过 `close()` | ✓ exit 1 | `registers SIGINT and SIGTERM exactly once and closes idempotently`（lifecycle，端口释放断言失败） |
 
 恢复：全部使用变异前文件副本原位还原（未使用 `git checkout --`）；恢复后 Task 20
-聚焦测试 47 passed 复验绿色；`grep -R "mutation|MUTATION|fake text|req-internal|0.0.0.0"
+聚焦测试 48 passed 复验绿色；`grep -R "mutation|MUTATION|fake text|req-internal|0.0.0.0"
 apps/local-agent-host/src` 无残留。
 
 ## 7. 验证命令与退出码
@@ -111,11 +111,11 @@ apps/local-agent-host/src` 无残留。
 | 2 | `corepack pnpm verify:layout` | 0 | |
 | 3 | `corepack pnpm typecheck` | 0 | |
 | 4 | `corepack pnpm build:local-agent-host` | 0 | 输出 `apps/local-agent-host/dist/`（git 忽略） |
-| 5 | `corepack pnpm test tests/task-20-*.test.ts` | 0 | 47 passed |
+| 5 | `corepack pnpm test tests/task-20-*.test.ts` | 0 | 48 passed |
 | 6 | `corepack pnpm test tests/task-9-*.test.ts` | 0 | 65 passed |
 | 7 | `corepack pnpm test tests/task-13-*.test.ts` | 0 | 131 passed |
 | 8 | `corepack pnpm test tests/task-16-*.test.ts` | 0 | 60 passed |
-| 9 | `corepack pnpm test` | 0 | 84 文件 / 1633 测试 |
+| 9 | `corepack pnpm test` | 0 | 84 文件 / 1634 测试 |
 | 10 | `corepack pnpm security:scan` | 0 | 328 files scanned |
 | 11 | `corepack pnpm evals:deterministic` | 0 | 18 场景 + cargo target 检查 |
 | 12 | `cargo fmt -- --check` / `cargo check` / `cargo test` | 0 | 55 Rust 测试通过 |

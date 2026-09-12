@@ -169,7 +169,8 @@ error messages the renderer already handles.
 Task 19 introduces an injectable backend seam inside the Rust host and pins
 the Cargo build output to the repository root. The IPC contract, the
 `host_not_ready` behavior and every security boundary from Task 18 are
-unchanged. Task 20 and Task 21 have not been started.
+unchanged. At the Task 19 checkpoint, Task 20 and Task 21 had not yet
+started; Task 20 is now complete and Task 21 has not been started.
 
 ## HostBackend / HostRuntime
 

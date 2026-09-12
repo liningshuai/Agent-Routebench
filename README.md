@@ -23,7 +23,7 @@
 - 委托顺序固定：接收参数 → 校验（敏感字段 → 未知字段 → 结构）→ 失败立即返回固定错误（不触碰 Backend）→ 校验通过才委托 `runtime.backend()`；`agent_health` 不接收 State、不读取 Backend
 - Cargo 构建输出经 `.cargo/config.toml` 固化到仓库根 `target/`（git 忽略、在安全扫描根之外）：`src-tauri/target` 不再出现，安全扫描在有构建产物的状态下可复现通过；native build 不依赖 shell 临时 `CARGO_TARGET_DIR`
 - `build:desktop` 增加 cross-process 锁、staging 原子交换与输入指纹跳过，并行调用安全
-- 仍然没有：真实 Backend、Provider、模型调用、CredentialStore、Local Agent API Server、Node 子进程、安装包、托盘、远程网络、真实 `agent_turn_event` 发布；Task 20/21 尚未开始
+- 仍然没有：真实 Backend、Provider、模型调用、CredentialStore、Local Agent API Server、Node 子进程、安装包、托盘、远程网络、真实 `agent_turn_event` 发布；在 Task 19 检查点 Task 20/21 尚未开始，当前 Task 20 已完成，Task 21 待开始
 
 **Task 18：Tauri Native Desktop Shell and Host IPC MVP**。在 Task 17 的 TypeScript IPC bridge 基础上，加入真实的 Tauri 2 原生宿主基础层：
 
