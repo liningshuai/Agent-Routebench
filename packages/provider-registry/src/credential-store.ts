@@ -167,7 +167,7 @@ export function createSecureCredentialStore(
 
 /**
  * Fail-closed default CredentialStore. Always returns undefined; never
- * throws. This is NOT an OS Keychain implementation ¡ª it simply ensures
+ * throws. This is NOT an OS Keychain implementation â€” it simply ensures
  * that without an explicit credential source, no secret is ever available.
  */
 export class UnavailableCredentialStore implements CredentialStore {

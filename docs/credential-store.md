@@ -1,13 +1,13 @@
 # Credential Store
 
-`@agent-workbench/provider-registry` Ìá¹©°²È«¡¢¿É×¢Èë¡¢fail-closed µÄÆ¾¾İ´æ´¢±ß½ç¡£
+`@agent-workbench/provider-registry` æä¾›å®‰å…¨ã€å¯æ³¨å…¥ã€fail-closed çš„å‡­æ®å­˜å‚¨è¾¹ç•Œã€‚
 
-## ¹«¿ª½Ó¿Ú
+## å…¬å¼€æ¥å£
 
 ```ts
 createSecureCredentialStore(options: CredentialStoreOptions): CredentialStore
-UnavailableCredentialStore  // fail-closed Ä¬ÈÏÊµÏÖ
-InMemoryCredentialStore     // ²âÊÔÓÃÄÚ´æÊµÏÖ
+UnavailableCredentialStore  // fail-closed é»˜è®¤å®ç°
+InMemoryCredentialStore     // æµ‹è¯•ç”¨å†…å­˜å®ç°
 MAX_CREDENTIAL_BYTES        // 16 KiB
 ```
 
@@ -22,47 +22,47 @@ interface CredentialBackend {
 }
 ```
 
-Ö§³Ö object literal¡¢null-prototype ¶ÔÏó¡¢class ÊµÀı£¨sync/async£©¡£
-¾Ü¾ø null¡¢Êı×é¡¢primitive¡¢È±ÉÙ·½·¨¡¢·Çº¯Êı·½·¨¡£
+æ”¯æŒ object literalã€null-prototype å¯¹è±¡ã€class å®ä¾‹ï¼ˆsync/asyncï¼‰ã€‚
+æ‹’ç» nullã€æ•°ç»„ã€primitiveã€ç¼ºå°‘æ–¹æ³•ã€éå‡½æ•°æ–¹æ³•ã€‚
 
-ÕâÊÇÎ´À´ OS Keychain / Æ½Ì¨°²È«´æ´¢µÄÊÊÅä±ß½ç¡£
+è¿™æ˜¯æœªæ¥ OS Keychain / å¹³å°å®‰å…¨å­˜å‚¨çš„é€‚é…è¾¹ç•Œã€‚
 
-## credentialRef ¹æÔò
+## credentialRef è§„åˆ™
 
-¸´ÓÃ ProviderRegistry µÄ `CREDENTIAL_REF_PATTERN`£º
+å¤ç”¨ ProviderRegistry çš„ `CREDENTIAL_REF_PATTERN`ï¼š
 
 ```text
 ^credential:[a-z][a-z0-9._-]{0,63}$
 ```
 
-¾Ü¾ø£º¿Õ¡¢´¿¿Õ°×¡¢null¡¢·Ç×Ö·û´®¡¢»»ĞĞ¡¢¿ØÖÆ×Ö·û¡¢Â·¾¶´©Ô½¡¢URL scheme¡£
+æ‹’ç»ï¼šç©ºã€çº¯ç©ºç™½ã€nullã€éå­—ç¬¦ä¸²ã€æ¢è¡Œã€æ§åˆ¶å­—ç¬¦ã€è·¯å¾„ç©¿è¶Šã€URL schemeã€‚
 
-## secret ¹æÔò
+## secret è§„åˆ™
 
-- ×Ö·û´®¡¢·Ç¿Õ¡¢·Ç´¿¿Õ°×
-- UTF-8 ×Ö½ÚÊı ¡Ü `MAX_CREDENTIAL_BYTES`£¨16 KiB£©
-- ¾Ü¾ø NUL ºÍ¿ØÖÆ×Ö·û£¨³ı³£¼û¿Õ°×£©
-- ²»×Ô¶¯ trim
-- ²»³öÏÖÔÚ´íÎóÏûÏ¢¡¢ÈÕÖ¾¡¢ÊÂ¼şÖĞ
+- å­—ç¬¦ä¸²ã€éç©ºã€éçº¯ç©ºç™½
+- UTF-8 å­—èŠ‚æ•° â‰¤ `MAX_CREDENTIAL_BYTES`ï¼ˆ16 KiBï¼‰
+- æ‹’ç» NUL å’Œæ§åˆ¶å­—ç¬¦ï¼ˆé™¤å¸¸è§ç©ºç™½ï¼‰
+- ä¸è‡ªåŠ¨ trim
+- ä¸å‡ºç°åœ¨é”™è¯¯æ¶ˆæ¯ã€æ—¥å¿—ã€äº‹ä»¶ä¸­
 
-## ÉúÃüÖÜÆÚ
+## ç”Ÿå‘½å‘¨æœŸ
 
 ```text
-set(ref, secret) ¡ú ÑéÖ¤ ¡ú Î¯ÍĞ backend
-get(ref)         ¡ú ÑéÖ¤ ¡ú Î¯ÍĞ backend ¡ú ¼ì²é·µ»ØÀàĞÍ
-has(ref)         ¡ú ÑéÖ¤ ¡ú Î¯ÍĞ backend
-delete(ref)      ¡ú ÑéÖ¤ ¡ú Î¯ÍĞ backend
+set(ref, secret) â†’ éªŒè¯ â†’ å§”æ‰˜ backend
+get(ref)         â†’ éªŒè¯ â†’ å§”æ‰˜ backend â†’ æ£€æŸ¥è¿”å›ç±»å‹
+has(ref)         â†’ éªŒè¯ â†’ å§”æ‰˜ backend
+delete(ref)      â†’ éªŒè¯ â†’ å§”æ‰˜ backend
 ```
 
-ºó¶ËÒì³£ÕÛµşÎª¹Ì¶¨ `credential_backend_failed`£¬²»»ØÏÔÔ­Ê¼Òì³£¡£
+åç«¯å¼‚å¸¸æŠ˜å ä¸ºå›ºå®š `credential_backend_failed`ï¼Œä¸å›æ˜¾åŸå§‹å¼‚å¸¸ã€‚
 
-## Ä¬ÈÏ fail-closed
+## é»˜è®¤ fail-closed
 
-`UnavailableCredentialStore`£º`get()` ÓÀÔ¶·µ»Ø `undefined`¡£
-Õâ²»ÊÇ OS Keychain ÊµÏÖ¡£
+`UnavailableCredentialStore`ï¼š`get()` æ°¸è¿œè¿”å› `undefined`ã€‚
+è¿™ä¸æ˜¯ OS Keychain å®ç°ã€‚
 
-## Î´ÊµÏÖ
+## æœªå®ç°
 
-- ÕæÊµ OS Keychain / Windows Credential Manager / macOS Keychain
-- HTTP Æ¾¾İ¹ÜÀí½Ó¿Ú
-- Æ¾¾İ³Ö¾Ã»¯
+- çœŸå® OS Keychain / Windows Credential Manager / macOS Keychain
+- HTTP å‡­æ®ç®¡ç†æ¥å£
+- å‡­æ®æŒä¹…åŒ–
