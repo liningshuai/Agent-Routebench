@@ -23,6 +23,9 @@ pub const SIDECAR_PROXY_UNAVAILABLE: &str = "sidecar_proxy_unavailable";
 pub const SIDECAR_PROXY_HTTP_ERROR: &str = "sidecar_proxy_http_error";
 pub const SIDECAR_PROXY_PROTOCOL_ERROR: &str = "sidecar_proxy_protocol_error";
 pub const SIDECAR_PROXY_ABORTED: &str = "sidecar_proxy_aborted";
+pub const CONFIGURATION_UNAVAILABLE: &str = "configuration_unavailable";
+pub const INVALID_CONFIG_REQUEST: &str = "invalid_config_request";
+pub const CONFIG_PERSISTENCE_FAILED: &str = "config_persistence_failed";
 
 /// A fixed, serializable host error. Only `code` and `message` are exposed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -118,6 +121,21 @@ impl HostError {
     /// The sidecar proxy request was aborted.
     pub const fn sidecar_proxy_aborted() -> Self {
         Self::new(SIDECAR_PROXY_ABORTED, "Sidecar proxy request was aborted.")
+    }
+
+    /// Configuration management is not available.
+    pub const fn configuration_unavailable() -> Self {
+        Self::new(CONFIGURATION_UNAVAILABLE, "Configuration is unavailable.")
+    }
+
+    /// The configuration request is invalid.
+    pub const fn invalid_config_request() -> Self {
+        Self::new(INVALID_CONFIG_REQUEST, "Configuration request is invalid.")
+    }
+
+    /// Configuration persistence failed.
+    pub const fn config_persistence_failed() -> Self {
+        Self::new(CONFIG_PERSISTENCE_FAILED, "Configuration persistence failed.")
     }
 }
 

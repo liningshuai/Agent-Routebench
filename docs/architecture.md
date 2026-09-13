@@ -874,3 +874,31 @@ CredentialStore (既有接口)
 - 默认 `UnavailableCredentialStore` fail-closed
 - 不是 OS Keychain 实现；未实现真实平台存储
 - 详见 [Credential Store](credential-store.md) 与 [Task 26 报告](verification/task-26-report.md)。
+
+
+### Task 27（已完成：Provider / Route 配置管理与 Desktop 设置闭环）
+
+新增 ConfigManager 与 Desktop Config Client：
+
+```text
+Desktop Settings UI
+    ↓
+DesktopConfigApiClient
+    ↓
+Tauri commands (fail-closed)
+    ↓
+Rust Native Proxy (loopback only)
+    ↓
+Node Local Agent Host
+    ↓
+ConfigManager → ProviderRegistry + local-persistence
+```
+
+边界：
+
+- Provider/Route 非敏感配置 CRUD；`credentialRef` 只是引用
+- 每次变更原子持久化；失败回滚内存状态
+- 并发变更串行化；删除被引用 Provider 被拒绝
+- 不暴露 secret；不连接真实 Provider；不读取真实凭据
+- Rust 配置命令当前返回固定 `configuration_unavailable`（fail-closed）
+- 详见 [Config Management](config-management.md) 与 [Task 27 报告](verification/task-27-report.md)。

@@ -55,6 +55,13 @@ pub fn run() {
             commands::agent_create_session,
             commands::agent_start_turn,
             commands::agent_cancel_turn,
+            commands::agent_get_config,
+            commands::agent_create_provider,
+            commands::agent_update_provider,
+            commands::agent_delete_provider,
+            commands::agent_create_route,
+            commands::agent_update_route,
+            commands::agent_delete_route,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the tauri host")

@@ -16,6 +16,13 @@ export const TAURI_COMMANDS = Object.freeze({
   createSession: "agent_create_session",
   startTurn: "agent_start_turn",
   cancelTurn: "agent_cancel_turn",
+  getConfig: "agent_get_config",
+  createProvider: "agent_create_provider",
+  updateProvider: "agent_update_provider",
+  deleteProvider: "agent_delete_provider",
+  createRoute: "agent_create_route",
+  updateRoute: "agent_update_route",
+  deleteRoute: "agent_delete_route",
 } as const);
 
 export const TAURI_EVENTS = Object.freeze({

@@ -321,6 +321,16 @@ const required = [
   "tests/task-26-credential-store-integration.test.ts",
   "docs/credential-store.md",
   "docs/verification/task-26-report.md",
+  "apps/local-agent-host/src/config-manager.ts",
+  "apps/desktop/src/config-client.ts",
+  "tests/task-27-config-manager.test.ts",
+  "tests/task-27-config-api.test.ts",
+  "tests/task-27-config-security.test.ts",
+  "tests/task-27-config-concurrency.test.ts",
+  "tests/task-27-desktop-config.test.ts",
+  "tests/task-27-tauri-config-boundary.test.ts",
+  "docs/config-management.md",
+  "docs/verification/task-27-report.md",
 ];
 
 for (const path of required) {
@@ -562,6 +572,15 @@ runScenario("task 26 secure credential store boundary", [
   "tests/task-26-credential-store-validation.test.ts",
   "tests/task-26-credential-store-concurrency.test.ts",
   "tests/task-26-credential-store-integration.test.ts",
+]);
+
+runScenario("task 27 provider and route management", [
+  "tests/task-27-config-manager.test.ts",
+  "tests/task-27-config-api.test.ts",
+  "tests/task-27-config-security.test.ts",
+  "tests/task-27-config-concurrency.test.ts",
+  "tests/task-27-desktop-config.test.ts",
+  "tests/task-27-tauri-config-boundary.test.ts",
 ]);
 console.log(
   [

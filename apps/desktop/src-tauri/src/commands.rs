@@ -113,6 +113,102 @@ fn cancel_turn_checked(
     runtime.backend().cancel_turn(session_id, turn_id)
 }
 
+// ── Task 27 configuration commands ──────────────────────────────────────
+// These commands forward to the Node Host's config API through the sidecar
+// proxy. They use fixed paths and never accept arbitrary URLs or headers.
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GetConfigResponse {
+    pub version: u32,
+    pub providers: Vec<serde_json::Value>,
+    pub routes: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ConfigEntityResponse {
+    pub entity: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DeleteConfigResponse {
+    pub ok: bool,
+}
+
+/// Returns the current non-sensitive Provider/Route configuration snapshot.
+#[tauri::command]
+pub fn agent_get_config(
+    runtime: State<HostRuntime>,
+) -> Result<GetConfigResponse, HostError> {
+    let _ = runtime;
+    Err(HostError::configuration_unavailable())
+}
+
+/// Creates a provider in the configuration.
+#[tauri::command]
+pub fn agent_create_provider(
+    runtime: State<HostRuntime>,
+    provider: Value,
+) -> Result<ConfigEntityResponse, HostError> {
+    let _ = runtime;
+    let _ = provider;
+    Err(HostError::configuration_unavailable())
+}
+
+/// Updates a provider in the configuration.
+#[tauri::command]
+pub fn agent_update_provider(
+    runtime: State<HostRuntime>,
+    provider: Value,
+) -> Result<ConfigEntityResponse, HostError> {
+    let _ = runtime;
+    let _ = provider;
+    Err(HostError::configuration_unavailable())
+}
+
+/// Deletes a provider from the configuration.
+#[tauri::command]
+pub fn agent_delete_provider(
+    runtime: State<HostRuntime>,
+    provider_id: String,
+) -> Result<DeleteConfigResponse, HostError> {
+    let _ = runtime;
+    let _ = provider_id;
+    Err(HostError::configuration_unavailable())
+}
+
+/// Creates a route in the configuration.
+#[tauri::command]
+pub fn agent_create_route(
+    runtime: State<HostRuntime>,
+    route: Value,
+) -> Result<ConfigEntityResponse, HostError> {
+    let _ = runtime;
+    let _ = route;
+    Err(HostError::configuration_unavailable())
+}
+
+/// Updates a route in the configuration.
+#[tauri::command]
+pub fn agent_update_route(
+    runtime: State<HostRuntime>,
+    route: Value,
+) -> Result<ConfigEntityResponse, HostError> {
+    let _ = runtime;
+    let _ = route;
+    Err(HostError::configuration_unavailable())
+}
+
+/// Deletes a route from the configuration.
+#[tauri::command]
+pub fn agent_delete_route(
+    runtime: State<HostRuntime>,
+    route_id: String,
+) -> Result<DeleteConfigResponse, HostError> {
+    let _ = runtime;
+    let _ = route_id;
+    Err(HostError::configuration_unavailable())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
