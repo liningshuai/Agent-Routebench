@@ -3,6 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createConfiguredLocalAgentHost } from "../apps/local-agent-host/src/configured-host.js";
+import {
+  anthropicSuccessResponse,
+  createScriptedHttpClient,
+} from "./helpers/http-fixtures.js";
 
 let tempDir: string;
 
@@ -39,6 +43,93 @@ const VALID_CONFIG = {
 };
 
 describe("task 25 config integration", () => {
+  it("uses the loaded route, injected credential and fake HTTP client for a turn", async () => {
+    const configPath = join(tempDir, "working-config.json");
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        version: 1,
+        providers: [
+          {
+            id: "configured-provider",
+            name: "Configured Provider",
+            protocol: "anthropic_messages",
+            baseUrl: "https://provider.task25.invalid",
+            credentialRef: "credential:configured",
+            models: ["configured-model"],
+            enabled: true,
+          },
+        ],
+        routes: [
+          {
+            id: "configured-route",
+            name: "Configured Route",
+            providerId: "configured-provider",
+            model: "configured-model",
+            enabled: true,
+          },
+        ],
+      }),
+      "utf8",
+    );
+    const http = createScriptedHttpClient([
+      anthropicSuccessResponse("configured-offline-response"),
+    ]);
+    let credentialReads = 0;
+    const credentials = {
+      async get(ref: string) {
+        credentialReads += 1;
+        expect(ref).toBe("credential:configured");
+        return "fixture-credential-value";
+      },
+      async set() {},
+      async has() {
+        return true;
+      },
+      async delete() {},
+    };
+
+    const host = await createConfiguredLocalAgentHost({
+      host: "127.0.0.1",
+      port: 15610,
+      configFilePath: configPath,
+      credentials,
+      httpClient: http.client,
+    });
+
+    try {
+      const address = host.address();
+      const created = await fetch(`${address}/v1/sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const { session } = (await created.json()) as { session: { id: string } };
+      const turn = await fetch(`${address}/v1/sessions/${session.id}/turns`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/x-ndjson",
+        },
+        body: JSON.stringify({
+          routeId: "configured-route",
+          model: "configured-model",
+          messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+        }),
+      });
+      const lines = (await turn.text()).split("\n").filter(Boolean);
+      const events = lines.map((line) => JSON.parse(line) as { type: string; text?: string });
+
+      expect(turn.status).toBe(200);
+      expect(events.some((event) => event.type === "text_delta" && event.text === "configured-offline-response")).toBe(true);
+      expect(events[events.length - 1]?.type).toBe("completed");
+      expect(http.calls()).toBe(1);
+      expect(credentialReads).toBe(1);
+    } finally {
+      await host.close();
+    }
+  });
+
   it("full lifecycle: create session, start turn, get events", async () => {
     const configPath = join(tempDir, "config.json");
     await writeFile(configPath, JSON.stringify(VALID_CONFIG), "utf8");

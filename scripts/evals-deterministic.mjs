@@ -220,6 +220,7 @@ const required = [
   "apps/local-agent-host/src/host.ts",
   "apps/local-agent-host/src/main.ts",
   "apps/local-agent-host/src/index.ts",
+  "apps/local-agent-host/src/configured-host.ts",
   "tests/helpers/local-agent-host-fixtures.ts",
   "tests/task-20-local-agent-host.test.ts",
   "tests/task-20-local-agent-host-security.test.ts",
@@ -306,6 +307,13 @@ const required = [
   "tests/task-24-native-proxy-integration.test.ts",
   "docs/native-proxy.md",
   "docs/verification/task-24-report.md",
+  "tests/task-25-config-bootstrap.test.ts",
+  "tests/task-25-config-security.test.ts",
+  "tests/task-25-config-lifecycle.test.ts",
+  "tests/task-25-config-credentials.test.ts",
+  "tests/task-25-config-integration.test.ts",
+  "docs/config-bootstrap.md",
+  "docs/verification/task-25-report.md",
 ];
 
 for (const path of required) {
@@ -532,6 +540,14 @@ runScenario("task 24 native sidecar proxy", [
   "tests/task-24-native-proxy-cancellation.test.ts",
   "tests/task-24-native-proxy-integration.test.ts",
 ]);
+
+runScenario("task 25 secure configuration bootstrap", [
+  "tests/task-25-config-bootstrap.test.ts",
+  "tests/task-25-config-security.test.ts",
+  "tests/task-25-config-lifecycle.test.ts",
+  "tests/task-25-config-credentials.test.ts",
+  "tests/task-25-config-integration.test.ts",
+]);
 console.log(
   [
     "evals:deterministic passed.",
@@ -641,5 +657,10 @@ console.log(
     "are not consumed, event payloads are fail-closed, and the typed response release",
     "guard keeps the renderer response ahead of the first turn event. Native tests",
     "use loopback fixtures only; no external provider or credential access is performed.",
+    "Task 25 adds the configured Local Agent Host bootstrap: it validates an absolute",
+    "non-secret config path, restores a fresh ProviderRegistry before opening the listener,",
+    "assembles the existing Agent Backend, and accepts credentials only through explicit",
+    "injection. Startup performs no credential read or provider request; the default source",
+    "fails closed. Configuration errors are fixed and do not expose paths or secrets.",
   ].join(" "),
 );

@@ -77,6 +77,19 @@ describe("task 25 config bootstrap", () => {
     ).rejects.toMatchObject({ code: "invalid_config_path" });
   });
 
+  it("rejects invalid ports before creating a host", async () => {
+    const configPath = await writeConfig(tempDir, "config.json", VALID_CONFIG);
+    for (const port of [0, -1, 65536, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await expect(
+        createConfiguredLocalAgentHost({
+          host: "127.0.0.1",
+          port,
+          configFilePath: configPath,
+        }),
+      ).rejects.toMatchObject({ code: "invalid_config_path" });
+    }
+  });
+
   it("rejects a config path with a query fragment", async () => {
     await expect(
       createConfiguredLocalAgentHost({
