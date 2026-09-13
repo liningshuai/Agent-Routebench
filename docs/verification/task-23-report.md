@@ -17,12 +17,18 @@ Tauri Desktop 与 Node Local Agent Host 跨进程连接 MVP。
 | `apps/desktop/src-tauri/src/sidecar.rs` | `NodeHostSupervisor` + `SidecarLaunchConfig` + 测试（20 Rust 测试） |
 | `apps/desktop/src-tauri/src/errors.rs` | 新增 sidecar 错误码与固定消息 |
 | `apps/desktop/src-tauri/src/lib.rs` | 注册 `sidecar` 模块 |
+| `apps/desktop/src-tauri/tauri.conf.json` | 声明仅包含 sidecar dist 的资源映射 |
+| `apps/local-agent-host/package.json` | 使用自包含 sidecar 构建入口 |
+| `scripts/build-local-agent-host.mjs` | 编译并重写 Node workspace 运行时闭包 |
 | `tests/task-23-sidecar-integration.test.ts` | 集成测试（16） |
 | `tests/task-23-sidecar-security.test.ts` | 安全测试（13） |
 | `tests/task-23-sidecar-lifecycle.test.ts` | 生命周期测试（6） |
 | `tests/task-23-renderer-boundary.test.ts` | Renderer 边界测试（5） |
+| `tests/task-23-tauri-integration.test.ts` | Tauri setup、退出清理、资源与构建边界（6） |
 | `scripts/evals-deterministic.mjs` | 新增 Task 23 场景与必需文件 |
 | `docs/verification/task-23-report.md` | 本报告 |
+
+> 说明：本文件记录 Task 23 首轮实现，首轮报告中的部分行为证据后来被审查发现不足。返工后的权威结果见 [`task-23-rework-report.md`](task-23-rework-report.md)。
 
 ## Supervisor 状态机
 
@@ -46,14 +52,15 @@ created → starting → running → stopping → stopped
 ## 取消与资源释放
 
 - stop 有界等待（5 秒超时）
-- stdout/stderr 通过管道消费避免死锁
+- 首轮实现使用 piped stdout/stderr；返工后改为 `Stdio::null()`，详见返工报告
+- 返工后健康探活验证 HTTP `GET /health` 与固定 JSON，不再只做 TCP connect
 - Drop 时自动 stop
 - 迟到 resolve/reject 不产生 unhandled rejection
 
 ## 测试数量
 
 - Rust: 76（新增 ~20 sidecar 测试）
-- TypeScript: 1769 全量（新增 40 Task 23 测试）
+- 首轮 TypeScript: 1769 全量（新增 40 Task 23 测试）；返工新增 7 个 Tauri 接入回归，当前总数为 1776
 
 ## 受控变异
 
@@ -67,7 +74,7 @@ created → starting → running → stopping → stopped
 | 6 | stop 不回收进程 | 是（stop_transitions_to_stopped_from_running） |
 | 7 | 删除退出清理 | 是（Drop 测试） |
 | 8 | NotReady 伪造成功 | 是（turn on NotReady host produces runner_error） |
-| 9 | 错误消息拼接原始路径 | 是（error_messages_are_fixed） |
+| 9 | 错误消息拼接原始路径 | 首轮未有效独立检出；返工新增源文件标记断言 |
 | 10 | Renderer 直接暴露子进程错误 | 是（renderer data boundary 测试） |
 
 ## 验证命令
@@ -78,12 +85,12 @@ corepack pnpm verify:layout             → 0
 corepack pnpm build:local-agent-host    → 0
 corepack pnpm build:desktop             → 0
 corepack pnpm typecheck                 → 0
-corepack pnpm test                      → 0（1769 passed）
+corepack pnpm test                      → 0（首轮 1769；返工后当前 1776 passed）
 corepack pnpm security:scan             → 0
 corepack pnpm evals:deterministic       → 0
 cargo fmt --check                       → 0
 cargo check                             → 0
-cargo test                              → 0（76 passed）
+cargo test                              → 0（首轮 76；返工后当前 83 passed）
 git diff --check                        → 0
 ```
 

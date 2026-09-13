@@ -246,3 +246,38 @@ echoes. `NotReadyBackend` is unchanged: it still fails all three operations
 with the fixed `host_not_ready` error and fabricates nothing. Task 21 must
 connect a real backend exclusively through this typed response contract;
 no real backend, provider, credential store or model call exists yet.
+
+---
+
+# Task 23 — Native Node sidecar supervision
+
+Task 23 adds the native lifecycle boundary for the Node Local Agent Host.
+`NodeHostSupervisor` is created and started from the Tauri `setup` hook and is
+stopped from the Tauri `RunEvent::Exit` callback. The existing typed Tauri IPC
+bridge remains the renderer boundary; this task does not add a second renderer
+protocol or expose sidecar internals to the UI.
+
+## Sidecar guarantees
+
+- `SidecarLaunchConfig` accepts only `node`, a non-empty script path,
+  `127.0.0.1`, and a port from 1 through 65535.
+- The child is launched with `std::process::Command` and direct arguments;
+  no shell is involved.
+- `TcpHealthProbe` performs a bounded HTTP `GET /health` and accepts only the
+  exact `agent-workbench-local-api` health payload. A listening TCP port alone
+  is not considered healthy.
+- Child stdout and stderr use `Stdio::null()` because the host has no log
+  consumer. This avoids a full-pipe deadlock.
+- `stop()` checks for an already exited child, propagates kill failures and
+  treats a bounded wait timeout as `sidecar_stop_failed`; it never reports a
+  failed cleanup as success.
+- A per-supervisor operation lock serializes concurrent `start()` and
+  `stop()` calls. `Drop` performs best-effort idempotent cleanup.
+
+## Resource layout
+
+`scripts/build-local-agent-host.mjs` builds the local host and its workspace
+runtime closure into a self-contained ESM directory. Tauri resources include
+only `local-agent-host/dist/`, not the app source tree or workspace symlinks.
+The Node host remains the existing safe Local Agent API entry; Task 23 does
+not add provider calls, credentials, persistence, or shell/file tools.

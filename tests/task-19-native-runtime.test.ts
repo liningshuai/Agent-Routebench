@@ -91,10 +91,11 @@ describe("Task 19: HostRuntime container", () => {
     expect(lib).toContain("mod runtime;");
   });
 
-  test("lib.rs registers no fake backend and no second runtime", () => {
+  test("lib.rs registers the runtime and the sidecar as separate Tauri states", () => {
     const lib = rustFile("lib.rs");
     expect(lib).not.toContain("TestBackend");
-    expect(lib.split("manage(").length - 1).toBe(1);
+    expect(lib.match(/\.manage\(HostRuntime::not_ready\(\)\)/g)).toHaveLength(1);
+    expect(lib.match(/app\.manage\(supervisor\)/g)).toHaveLength(1);
   });
 
   test("no global mutable backend state exists in the Rust host", () => {

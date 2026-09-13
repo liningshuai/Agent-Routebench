@@ -4,7 +4,7 @@
 //! Local Agent API. Never uses a shell, never binds non-loopback, never
 //! leaks paths or raw errors across the IPC boundary.
 
-use std::io::Read;
+use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -114,8 +114,11 @@ impl ProcessLauncher for StdProcessLauncher {
             .arg("--port")
             .arg(config.port.to_string())
             .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            // The sidecar has no log consumer in the native host. Discarding
+            // both streams prevents a child that logs heavily from blocking
+            // on a full pipe while the supervisor is waiting for health.
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
 
         let child = command
             .spawn()
@@ -138,19 +141,6 @@ impl ChildProcess for StdChildProcess {
     }
 
     fn kill(&mut self) -> Result<(), HostError> {
-        // Drain pipes in the background so a full buffer cannot deadlock kill.
-        if let Some(mut stdout) = self.child.stdout.take() {
-            std::thread::spawn(move || {
-                let mut sink = Vec::new();
-                let _ = stdout.read_to_end(&mut sink);
-            });
-        }
-        if let Some(mut stderr) = self.child.stderr.take() {
-            std::thread::spawn(move || {
-                let mut sink = Vec::new();
-                let _ = stderr.read_to_end(&mut sink);
-            });
-        }
         self.child
             .kill()
             .map_err(|_| HostError::sidecar_stop_failed())
@@ -170,7 +160,8 @@ impl ChildProcess for StdChildProcess {
     }
 }
 
-/// Production health probe: TCP connect to the loopback port only.
+/// Production health probe: validate the Local Agent API `/health` contract
+/// over the loopback socket, not merely the existence of a listening port.
 pub struct TcpHealthProbe;
 
 impl HealthProbe for TcpHealthProbe {
@@ -178,11 +169,54 @@ impl HealthProbe for TcpHealthProbe {
         if host != SIDECAR_LOOPBACK_HOST {
             return false;
         }
-        TcpStream::connect_timeout(
-            &format!("{host}:{port}").parse().expect("loopback parse"),
-            Duration::from_millis(200),
-        )
-        .is_ok()
+        let address = match format!("{host}:{port}").parse() {
+            Ok(address) => address,
+            Err(_) => return false,
+        };
+        let mut stream = match TcpStream::connect_timeout(&address, Duration::from_millis(200)) {
+            Ok(stream) => stream,
+            Err(_) => return false,
+        };
+        let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
+        let _ = stream.set_write_timeout(Some(Duration::from_millis(200)));
+        if stream
+            .write_all(b"GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+            .is_err()
+        {
+            return false;
+        }
+
+        let mut response = Vec::new();
+        if stream.take(16 * 1024).read_to_end(&mut response).is_err() {
+            return false;
+        }
+        let Some(separator) = response.windows(4).position(|window| window == b"\r\n\r\n") else {
+            return false;
+        };
+        let headers = &response[..separator];
+        let body = &response[separator + 4..];
+        let Ok(headers) = std::str::from_utf8(headers) else {
+            return false;
+        };
+        let Some(status_line) = headers.lines().next() else {
+            return false;
+        };
+        if status_line != "HTTP/1.1 200 OK" && status_line != "HTTP/1.0 200 OK" {
+            return false;
+        }
+        let Ok(payload) = serde_json::from_slice::<serde_json::Value>(body) else {
+            return false;
+        };
+        let Some(payload) = payload.as_object() else {
+            return false;
+        };
+        payload.len() == 3
+            && payload.get("ok") == Some(&serde_json::Value::Bool(true))
+            && payload.get("service")
+                == Some(&serde_json::Value::String(String::from(
+                    "agent-workbench-local-api",
+                )))
+            && payload.get("version") == Some(&serde_json::Value::Number(1.into()))
     }
 }
 
@@ -190,6 +224,7 @@ impl HealthProbe for TcpHealthProbe {
 pub struct NodeHostSupervisor {
     state: Mutex<SidecarState>,
     child: Mutex<Option<Box<dyn ChildProcess>>>,
+    operation: Mutex<()>,
     config: SidecarLaunchConfig,
     launcher: Box<dyn ProcessLauncher>,
     probe: Box<dyn HealthProbe>,
@@ -201,6 +236,7 @@ impl NodeHostSupervisor {
         Self {
             state: Mutex::new(SidecarState::Created),
             child: Mutex::new(None),
+            operation: Mutex::new(()),
             config,
             launcher: Box::new(StdProcessLauncher),
             probe: Box::new(TcpHealthProbe),
@@ -217,6 +253,7 @@ impl NodeHostSupervisor {
         Self {
             state: Mutex::new(SidecarState::Created),
             child: Mutex::new(None),
+            operation: Mutex::new(()),
             config,
             launcher,
             probe,
@@ -234,6 +271,7 @@ impl NodeHostSupervisor {
 
     /// Idempotent start. Concurrent callers share one child.
     pub fn start(&self) -> Result<(), HostError> {
+        let _operation = self.operation.lock().expect("operation lock");
         {
             let mut state = self.state.lock().expect("state lock");
             match *state {
@@ -288,9 +326,11 @@ impl NodeHostSupervisor {
 
             if Instant::now() >= deadline {
                 // Health never came up: kill the child and fail.
-                let _ = self.force_stop_child();
                 *self.state.lock().expect("state lock") = SidecarState::Failed;
-                return Err(HostError::sidecar_health_timeout());
+                return match self.force_stop_child() {
+                    Ok(()) => Err(HostError::sidecar_health_timeout()),
+                    Err(error) => Err(error),
+                };
             }
             std::thread::sleep(POLL_INTERVAL);
         }
@@ -298,6 +338,7 @@ impl NodeHostSupervisor {
 
     /// Idempotent stop. Safe when never started.
     pub fn stop(&self) -> Result<(), HostError> {
+        let _operation = self.operation.lock().expect("operation lock");
         {
             let mut state = self.state.lock().expect("state lock");
             match *state {
@@ -326,14 +367,23 @@ impl NodeHostSupervisor {
 
     fn force_stop_child(&self) -> Result<(), HostError> {
         let mut guard = self.child.lock().expect("child lock");
-        let Some(mut process) = guard.take() else {
+        let Some(process) = guard.as_mut() else {
             return Ok(());
         };
-        let _ = process.kill();
-        match process.wait_with_timeout(STOP_TIMEOUT) {
-            Ok(_) => Ok(()),
-            Err(error) => Err(error),
+        if process.try_wait()?.is_some() {
+            *guard = None;
+            return Ok(());
         }
+        process.kill()?;
+        let result = match process.wait_with_timeout(STOP_TIMEOUT) {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => Err(HostError::sidecar_stop_failed()),
+            Err(error) => Err(error),
+        };
+        if result.is_ok() {
+            *guard = None;
+        }
+        result
     }
 }
 
@@ -681,6 +731,8 @@ mod tests {
         assert_eq!(error.message, "Sidecar failed to start.");
         assert!(!error.message.contains("node"));
         assert!(!error.message.contains("/app"));
+        assert!(!error.message.contains("sidecar.rs"));
+        assert!(!error.message.contains("errors.rs"));
     }
 
     #[test]
@@ -688,5 +740,238 @@ mod tests {
         let probe = TcpHealthProbe;
         assert!(!probe.check("0.0.0.0", 4317));
         assert!(!probe.check("example.com", 4317));
+    }
+
+    #[test]
+    fn tcp_health_probe_requires_the_local_agent_health_contract() {
+        use std::io::Write;
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind((SIDECAR_LOOPBACK_HOST, 0)).expect("bind");
+        let port = listener.local_addr().expect("address").port();
+        let thread = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut request = [0_u8; 256];
+            let _ = stream.read(&mut request);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}")
+                .expect("response");
+        });
+
+        assert!(!TcpHealthProbe.check(SIDECAR_LOOPBACK_HOST, port));
+        thread.join().expect("health server");
+    }
+
+    #[test]
+    fn tcp_health_probe_rejects_extra_health_fields() {
+        use std::io::Write;
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind((SIDECAR_LOOPBACK_HOST, 0)).expect("bind");
+        let port = listener.local_addr().expect("address").port();
+        let thread = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut request = [0_u8; 256];
+            let _ = stream.read(&mut request);
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 64\r\n\r\n{\"ok\":true,\"service\":\"agent-workbench-local-api\",\"version\":1,\"extra\":true}",
+                )
+                .expect("response");
+        });
+
+        assert!(!TcpHealthProbe.check(SIDECAR_LOOPBACK_HOST, port));
+        thread.join().expect("health server");
+    }
+
+    struct FailingStopChild {
+        kill_error: bool,
+        wait_result: Option<i32>,
+    }
+
+    impl ChildProcess for FailingStopChild {
+        fn try_wait(&mut self) -> Result<Option<i32>, HostError> {
+            Ok(None)
+        }
+
+        fn kill(&mut self) -> Result<(), HostError> {
+            if self.kill_error {
+                Err(HostError::sidecar_stop_failed())
+            } else {
+                Ok(())
+            }
+        }
+
+        fn wait_with_timeout(&mut self, _timeout: Duration) -> Result<Option<i32>, HostError> {
+            Ok(self.wait_result)
+        }
+    }
+
+    struct OneChildLauncher {
+        child: Mutex<Option<FailingStopChild>>,
+    }
+
+    impl ProcessLauncher for OneChildLauncher {
+        fn spawn(&self, _config: &SidecarLaunchConfig) -> Result<Box<dyn ChildProcess>, HostError> {
+            Ok(Box::new(
+                self.child.lock().expect("child").take().expect("one child"),
+            ))
+        }
+    }
+
+    #[test]
+    fn stop_propagates_kill_failure_and_does_not_claim_stopped() {
+        let supervisor = NodeHostSupervisor::with_seams(
+            valid_config(),
+            Box::new(OneChildLauncher {
+                child: Mutex::new(Some(FailingStopChild {
+                    kill_error: true,
+                    wait_result: Some(0),
+                })),
+            }),
+            Box::new(CountingProbe::healthy()),
+        );
+        supervisor.start().expect("start");
+
+        assert_eq!(supervisor.stop(), Err(HostError::sidecar_stop_failed()));
+        assert_eq!(supervisor.state(), SidecarState::Failed);
+    }
+
+    #[test]
+    fn stop_treats_a_wait_timeout_as_a_stop_failure() {
+        let supervisor = NodeHostSupervisor::with_seams(
+            valid_config(),
+            Box::new(OneChildLauncher {
+                child: Mutex::new(Some(FailingStopChild {
+                    kill_error: false,
+                    wait_result: None,
+                })),
+            }),
+            Box::new(CountingProbe::healthy()),
+        );
+        supervisor.start().expect("start");
+
+        assert_eq!(supervisor.stop(), Err(HostError::sidecar_stop_failed()));
+        assert_eq!(supervisor.state(), SidecarState::Failed);
+    }
+
+    struct RetryableStopChild {
+        allow_kill: Arc<AtomicBool>,
+        exited: bool,
+    }
+
+    impl ChildProcess for RetryableStopChild {
+        fn try_wait(&mut self) -> Result<Option<i32>, HostError> {
+            Ok(self.exited.then_some(0))
+        }
+
+        fn kill(&mut self) -> Result<(), HostError> {
+            if !self.allow_kill.load(Ordering::SeqCst) {
+                return Err(HostError::sidecar_stop_failed());
+            }
+            self.exited = true;
+            Ok(())
+        }
+
+        fn wait_with_timeout(&mut self, _timeout: Duration) -> Result<Option<i32>, HostError> {
+            Ok(self.exited.then_some(0))
+        }
+    }
+
+    struct RetryableChildLauncher {
+        child: Mutex<Option<RetryableStopChild>>,
+    }
+
+    impl ProcessLauncher for RetryableChildLauncher {
+        fn spawn(&self, _config: &SidecarLaunchConfig) -> Result<Box<dyn ChildProcess>, HostError> {
+            Ok(Box::new(
+                self.child.lock().expect("child").take().expect("one child"),
+            ))
+        }
+    }
+
+    #[test]
+    fn stop_retains_child_after_kill_failure_for_a_safe_retry() {
+        let allow_kill = Arc::new(AtomicBool::new(false));
+        let supervisor = NodeHostSupervisor::with_seams(
+            valid_config(),
+            Box::new(RetryableChildLauncher {
+                child: Mutex::new(Some(RetryableStopChild {
+                    allow_kill: allow_kill.clone(),
+                    exited: false,
+                })),
+            }),
+            Box::new(CountingProbe::healthy()),
+        );
+        supervisor.start().expect("start");
+
+        assert_eq!(supervisor.stop(), Err(HostError::sidecar_stop_failed()));
+        allow_kill.store(true, Ordering::SeqCst);
+        supervisor.stop().expect("retry stop");
+        assert_eq!(supervisor.state(), SidecarState::Stopped);
+    }
+
+    struct BlockingLauncher {
+        entered: Arc<AtomicBool>,
+        release: Arc<AtomicBool>,
+    }
+
+    impl ProcessLauncher for BlockingLauncher {
+        fn spawn(&self, _config: &SidecarLaunchConfig) -> Result<Box<dyn ChildProcess>, HostError> {
+            self.entered.store(true, Ordering::SeqCst);
+            while !self.release.load(Ordering::SeqCst) {
+                std::thread::yield_now();
+            }
+            Ok(Box::new(FakeChild::running()))
+        }
+    }
+
+    #[test]
+    fn concurrent_start_calls_share_one_start_operation() {
+        use std::sync::mpsc;
+
+        let entered = Arc::new(AtomicBool::new(false));
+        let release = Arc::new(AtomicBool::new(false));
+        let supervisor = Arc::new(NodeHostSupervisor::with_seams(
+            valid_config(),
+            Box::new(BlockingLauncher {
+                entered: entered.clone(),
+                release: release.clone(),
+            }),
+            Box::new(CountingProbe::healthy()),
+        ));
+
+        let first_supervisor = supervisor.clone();
+        let first = std::thread::spawn(move || first_supervisor.start());
+        while !entered.load(Ordering::SeqCst) {
+            std::thread::yield_now();
+        }
+
+        let second_supervisor = supervisor.clone();
+        let (ready_sender, ready_receiver) = mpsc::channel();
+        let (result_sender, result_receiver) = mpsc::channel();
+        let second = std::thread::spawn(move || {
+            ready_sender.send(()).expect("second start ready");
+            result_sender
+                .send(second_supervisor.start())
+                .expect("second start result");
+        });
+        ready_receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("second start thread");
+        assert!(result_receiver
+            .recv_timeout(Duration::from_millis(100))
+            .is_err());
+        release.store(true, Ordering::SeqCst);
+
+        assert_eq!(first.join().expect("first start"), Ok(()));
+        assert_eq!(
+            result_receiver
+                .recv_timeout(Duration::from_secs(1))
+                .expect("second start result"),
+            Ok(())
+        );
+        second.join().expect("second start");
+        assert_eq!(supervisor.state(), SidecarState::Running);
     }
 }

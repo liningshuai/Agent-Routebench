@@ -26,7 +26,7 @@ Anthropic Messages   OpenAI-compatible
 
 ## 已完成层级
 
-截至 Task 19，以下层级已实现并通过测试：
+截至 Task 23 返工收尾，以下层级已实现并通过测试：
 
 - **Desktop Interactive UI**（Task 15）：`mountDesktopUi()`、响应式渲染、会话切换、取消按钮、草稿保留、卸载清理与浏览器入口
 - **Desktop**（Task 14: `@agent-workbench/desktop`）：Tauri-ready 基础层，状态管理、API 边界、安全 ViewModel
@@ -40,10 +40,11 @@ Anthropic Messages   OpenAI-compatible
 - **Memory Store**（`@agent-workbench/agent-memory`）：进程内 Memory、确定性上下文压缩
 - **Shared Local Agent API Client**（Task 16: `@agent-workbench/local-agent-client`）：CLI 与 Desktop 共用的 loopback HTTP 客户端、NDJSON 解析与取消边界
 - **Tauri IPC Bridge**（Task 17: `TauriDesktopApiClient`）：将宿主注入的 `invoke` / `listen` 映射为 `DesktopApiClient`，校验 IPC 边界、过滤并发 turn 事件、处理取消与监听器释放
+- **Native Node Sidecar Supervisor**（Task 23：`NodeHostSupervisor`）：Tauri setup 启动并持有 loopback Node Host，退出时回收；启动探活验证真实 `/health` 响应，停止错误不被吞掉，sidecar 资源为自包含 ESM 闭包
 
 未完成层级：
 
-- **Tauri 原生宿主**（Task 18：`apps/desktop/src-tauri/`）：Tauri 2 Rust 项目可编译、原生窗口可启动；四个固定 command 经 `generate_handler!` 注册；严格 CSP 与最小 capabilities；后端依赖命令返回固定 `host_not_ready`。完整 Agent Backend 组装（Task 21）、菜单/托盘与生产打包尚未接入。
+- **Tauri Backend Proxy**：Rust command 目前仍保持 typed `HostRuntime` 契约与 `host_not_ready` 默认边界；Node sidecar 生命周期已接入，但 Tauri command 到 Node Backend 的真实代理、配置加载、菜单/托盘与生产安装包仍未完成。
 
 ## 契约层与依赖方向
 
@@ -792,12 +793,12 @@ Tauri Native Host
 边界：
 
 - 状态机：created → starting → running → stopping → stopped | failed
-- 启动成功前必须完成 Loopback 健康探活
+- 启动成功前必须完成 Loopback HTTP `/health` 契约探活，而不是仅 TCP connect
 - `start()` / `stop()` 幂等；并发 start 不创建多个子进程
-- stop 有界等待；stdout/stderr 管道消费避免死锁
+- stop 有界等待；stdout/stderr 使用 `Stdio::null()` 丢弃，避免管道回压阻塞
 - Drop 时自动 stop，避免孤儿进程
 - host 仅 `127.0.0.1`；port 1–65535；默认 4317
 - 错误消息固定，不回显路径/端口/命令/原始异常
-- Renderer 通过既有 `DesktopApiClient` 访问，不直接依赖 Provider/Credential/Backend
+- Tauri setup 持有 sidecar；应用退出回调负责 stop；Renderer 仍通过既有、已校验的 Tauri `DesktopApiClient` 访问
 - NotReady Host 的 turn 产生既有固定 `runner_error`，不伪造 `completed`
-- 详见 [Task 23 报告](verification/task-23-report.md)。
+- 详见 [Task 23 原始报告](verification/task-23-report.md) 与 [Task 23 返工报告](verification/task-23-rework-report.md)。

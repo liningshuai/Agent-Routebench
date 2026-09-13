@@ -4,6 +4,15 @@
 
 ## 当前阶段
 
+**Task 23 返工收尾：Native Node Sidecar 生命周期与 Tauri 接入加固**。在 Task 22 的可运行 Local Agent Host 基础上，补齐 Desktop 原生宿主的 sidecar 生命周期边界：
+
+- `NodeHostSupervisor` 由 Tauri `setup` 创建、启动并持有，在 `RunEvent::Exit` 中幂等停止；启动失败不会伪造 running
+- sidecar 只允许 `127.0.0.1` 与 1–65535 端口，使用无 shell 的 `std::process::Command`；stdout/stderr 使用 `Stdio::null()`，避免满管道阻塞
+- 健康探活必须获得真实的 `GET /health`、HTTP 200 与 `agent-workbench-local-api` 固定 JSON，而非只要 TCP 端口可连接
+- stop 对 kill 失败与有界等待超时返回固定 `sidecar_stop_failed`；并发 start/stop 由每实例操作锁串行化
+- `build:local-agent-host` 生成自包含 ESM sidecar 资源，Tauri 只打包 `local-agent-host/dist/`；Renderer 仍通过既有 Tauri IPC bridge，不新增第二套 UI 协议
+- 未完成：Tauri command 到 Node Backend 的真实代理、真实 Provider、凭据加载、安装包/托盘/自动更新
+
 **Task 22：将可运行 Agent Backend 接入 Loopback Local Agent Host**。在 `@agent-workbench/local-agent-host` 新增显式 Composition API：
 
 - `createRunnableLocalAgentHost({ host, port, backend, store?, maxBodyBytes? })`：backend options → `createAgentBackendRunner()` → `createLocalAgentHost()`，不复制任何既有实现

@@ -5,16 +5,18 @@
 The `@agent-workbench/desktop` package provides a Tauri-ready Desktop foundation with interactive UI, testable state management, dependency injection, and strict security boundaries for building the Agent Workbench desktop application.
 
 **Current Status:** Interactive UI, the Task 16 loopback adapter, the Task 17
-dependency-injected Tauri IPC bridge, the Task 18 Tauri native shell, and the
-Task 19 native host runtime boundary are implemented. The Desktop package uses
+dependency-injected Tauri IPC bridge, the Task 18 Tauri native shell, the
+Task 19 native host runtime boundary, and the Task 23 native Node sidecar
+supervisor are implemented. The Desktop package uses
 `createLoopbackDesktopApiClient()` for local development and
 `createTauriDesktopApiClient({ invoke, listen })` when hosted by Tauri.
 `apps/desktop/src-tauri/` contains a real Tauri 2 Rust host whose commands
 delegate through an injectable `HostBackend` seam; the production default
 `NotReadyBackend` still answers the fixed `host_not_ready` error until the
 Agent backend is assembled (Task 21). Cargo build output is pinned to the
-repository root `target/` via `.cargo/config.toml`. Production installers
-remain future work (`bundle.active: false`).
+repository root `target/` via `.cargo/config.toml`. The sidecar resource is
+built as a self-contained ESM closure by `build:local-agent-host`.
+Production installers remain future work (`bundle.active: false`).
 
 ## Architecture
 
@@ -292,7 +294,7 @@ controller.cancelTurn(sessionId);
 
 ## Future Work
 
-### Tauri Native Shell (Task 18 MVP)
+### Tauri Native Shell (Task 18) and sidecar supervision (Task 23)
 
 Task 18 wires the TypeScript bridge to a real Tauri 2 host:
 
@@ -315,9 +317,17 @@ Task 18 wires the TypeScript bridge to a real Tauri 2 host:
 5. **Restricted configuration:** strict CSP, single `main` window, capabilities
    limited to `core:event:default`, no plugin crates, `bundle.active: false`.
 
+Task 23 adds the native `NodeHostSupervisor` lifecycle around the loopback
+Local Agent Host. Tauri setup starts one validated child and the application
+exit callback stops it. Startup requires the exact `/health` response; child
+output is discarded rather than left in unconsumed pipes; kill and wait
+failures are surfaced as fixed errors. The renderer continues to use the
+validated Task 17 Tauri IPC bridge.
+
 The following host work remains outside this MVP:
 
-1. **Backend assembly:** connect the complete Agent Backend (Task 21)
+1. **Native proxy:** connect the Rust command contract to the Node sidecar's
+   runnable backend and event stream
 2. **Native features:** file dialogs, system tray, menu bar, auto-update
 3. **Installers:** `tauri build` bundling for Windows/macOS/Linux
 

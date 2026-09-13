@@ -9,7 +9,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 // Deterministic offline eval entry.
 //
 // Stage 1 verifies the expected layout.
-// Stage 2 actually runs the offline scenarios for Tasks 3â€?6 and propagates
+// Stage 2 actually runs the offline scenarios for Tasks 3â€”6 and propagates
 // their exit codes so this entry can never print "passed" without exercising
 // behaviour.
 //
@@ -293,10 +293,12 @@ const required = [
   "tests/task-12-memory-security.test.ts",
   "tests/task-12-context-cancellation.test.ts",
   "apps/desktop/src-tauri/src/sidecar.rs",
+  "scripts/build-local-agent-host.mjs",
   "tests/task-23-sidecar-integration.test.ts",
   "tests/task-23-sidecar-security.test.ts",
   "tests/task-23-sidecar-lifecycle.test.ts",
   "tests/task-23-renderer-boundary.test.ts",
+  "tests/task-23-tauri-integration.test.ts",
 ];
 
 for (const path of required) {
@@ -513,6 +515,7 @@ runScenario("task 23 tauri sidecar and loopback connection", [
   "tests/task-23-sidecar-security.test.ts",
   "tests/task-23-sidecar-lifecycle.test.ts",
   "tests/task-23-renderer-boundary.test.ts",
+  "tests/task-23-tauri-integration.test.ts",
 ]);
 console.log(
   [
@@ -611,5 +614,11 @@ console.log(
     "completed events, and fixes terminal error session status. All provider HTTP stays",
     "behind the injected fake client in offline scenarios; no real provider, credential,",
     "model call or network access exists.",
+  "Task 23 adds the native Node sidecar supervisor: Tauri setup owns one validated",
+  "loopback child while the renderer stays on the existing validated Tauri IPC bridge,",
+  "startup health requires the exact local /health response, and stop propagates kill",
+    "or wait failures instead of claiming success. Child output is discarded to avoid",
+    "pipe backpressure; exit cleanup is idempotent and concurrent lifecycle operations",
+    "are serialized. No remote network, provider call or credential access is performed.",
   ].join(" "),
 );

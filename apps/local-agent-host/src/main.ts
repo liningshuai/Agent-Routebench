@@ -2,6 +2,8 @@ import { createLocalAgentHost } from "./host.js";
 import { LocalAgentHostError } from "./errors.js";
 import type { LocalAgentHostMainOptions } from "./types.js";
 import { validateHostOptions } from "./validation.js";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 interface ParsedArguments {
   readonly host?: "127.0.0.1" | "localhost";
@@ -87,4 +89,12 @@ export async function runLocalAgentHostMain(
     );
     return 1;
   }
+}
+
+// Keep imports side-effect free for tests and library consumers, while making
+// the compiled file a real executable entry for the native Tauri supervisor.
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+  void runLocalAgentHostMain().then((exitCode) => {
+    process.exitCode = exitCode;
+  });
 }
