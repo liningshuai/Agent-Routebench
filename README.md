@@ -11,7 +11,7 @@
 - Rust 构建可复现性：`src-tauri` 关闭 incremental（`[profile.dev] incremental = false`），规避 rustc 1.98.1 在多 crate-type 元数据编码上的 ICE，使 `cargo test` 稳定通过
 - 新增 `verify:release` 验收入口：串联 verify:layout、typecheck、两个构建、全量测试、安全扫描、确定性评测、cargo fmt/check/test，并断言无 `src-tauri/target`、无残留未跟踪文件
 - 安全边界保持：loopback-only、无远程 devUrl、无外部 CDN、无 shell 启动、CSP 严格、错误消息固定、secret 不落盘、启动阶段不读凭据、默认 CredentialStore fail-closed
-- Task 28 新增 126 个聚焦测试（5 个文件），全量 TypeScript 2106 个测试通过，Rust 98 个单元测试通过；14 项受控变异全部被检出并原位恢复
+- Task 28 新增 131 个聚焦测试（5 个文件），全量 TypeScript 2112 个测试通过，Rust 98 个单元测试通过；18 项受控变异中 17 项被检出，1 项为白名单与敏感字段守卫重叠的冗余防护，全部已原位恢复
 - 未实现（明确不在本任务范围）：真实 Provider E2E、真实 API Key、OS Keychain、云端同步、SQLite、Web UI、托盘、自动更新、安装包签名、多用户鉴权、远程部署
 
 **Task 27 返工完成：Provider / Route 配置管理与 Desktop 设置闭环**。当前版本已经把配置从 Desktop 设置页贯通到 Tauri Native Proxy、Node Local Agent Host 和持久化 Registry：
