@@ -6,6 +6,8 @@
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::sync::{mpsc, Arc};
+use std::thread;
 use std::time::Duration;
 
 use serde_json::Value;
@@ -89,23 +91,208 @@ impl NativeEventSink for TauriEventSink {
     }
 }
 
-/// A minimal HTTP/1.1 response parsed from the sidecar.
+/// HTTP response metadata is separated from its body reader so a streaming
+/// turn can return its turn id before the body reaches EOF.
 struct HttpResponse {
     status: u16,
     headers: Vec<(String, String)>,
-    body: Vec<u8>,
+    body: BodyReader,
 }
 
 impl HttpResponse {
     fn header(&self, name: &str) -> Option<&str> {
         self.headers
             .iter()
-            .find(|(k, _)| k.eq_ignore_ascii_case(name))
-            .map(|(_, v)| v.as_str())
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
     }
 }
 
-/// Sends a fixed loopback HTTP/1.1 POST request and reads the full response.
+#[derive(Clone, Copy)]
+enum BodyFraming {
+    ContentLength(usize),
+    Chunked,
+    UntilEof,
+}
+
+/// Bounded incremental response body reader. It supports the two response
+/// framings emitted by Node's HTTP server and never reads a non-success body
+/// unless the caller explicitly asks for it.
+struct BodyReader {
+    stream: TcpStream,
+    buffer: Vec<u8>,
+    framing: BodyFraming,
+    remaining: usize,
+    chunk_remaining: usize,
+    chunk_needs_crlf: bool,
+    chunk_done: bool,
+    eof: bool,
+    total: usize,
+}
+
+impl BodyReader {
+    fn new(stream: TcpStream, initial: Vec<u8>, framing: BodyFraming) -> Self {
+        let remaining = match framing {
+            BodyFraming::ContentLength(length) => length,
+            BodyFraming::Chunked | BodyFraming::UntilEof => 0,
+        };
+        Self {
+            stream,
+            buffer: initial,
+            framing,
+            remaining,
+            chunk_remaining: 0,
+            chunk_needs_crlf: false,
+            chunk_done: false,
+            eof: false,
+            total: 0,
+        }
+    }
+
+    fn fill(&mut self) -> Result<bool, HostError> {
+        if self.eof {
+            return Ok(false);
+        }
+        let mut bytes = [0u8; 4096];
+        let count = self
+            .stream
+            .read(&mut bytes)
+            .map_err(|_| HostError::sidecar_proxy_unavailable())?;
+        if count == 0 {
+            self.eof = true;
+            return Ok(false);
+        }
+        self.buffer.extend_from_slice(&bytes[..count]);
+        Ok(true)
+    }
+
+    fn take(&mut self, count: usize) -> Vec<u8> {
+        self.buffer.drain(..count).collect()
+    }
+
+    fn ensure(&mut self, count: usize) -> Result<(), HostError> {
+        while self.buffer.len() < count {
+            if !self.fill()? {
+                return Err(HostError::sidecar_proxy_protocol_error());
+            }
+        }
+        Ok(())
+    }
+
+    fn read_line(&mut self) -> Result<Option<Vec<u8>>, HostError> {
+        loop {
+            if let Some(end) = self.buffer.windows(2).position(|window| window == b"\r\n") {
+                let line = self.take(end);
+                self.buffer.drain(..2);
+                return Ok(Some(line));
+            }
+            if self.buffer.len() > MAX_HEADER_BYTES {
+                return Err(HostError::sidecar_proxy_protocol_error());
+            }
+            if !self.fill()? {
+                return Ok(None);
+            }
+        }
+    }
+
+    fn account(&mut self, count: usize, limit: usize) -> Result<(), HostError> {
+        self.total = self
+            .total
+            .checked_add(count)
+            .ok_or(HostError::sidecar_proxy_protocol_error())?;
+        if self.total > limit {
+            return Err(HostError::sidecar_proxy_protocol_error());
+        }
+        Ok(())
+    }
+
+    fn next_piece(&mut self, limit: usize) -> Result<Option<Vec<u8>>, HostError> {
+        match self.framing {
+            BodyFraming::ContentLength(_) => {
+                if self.remaining == 0 {
+                    return Ok(None);
+                }
+                if self.buffer.is_empty() && !self.fill()? {
+                    return Err(HostError::sidecar_proxy_protocol_error());
+                }
+                let count = self.remaining.min(self.buffer.len()).min(4096);
+                let piece = self.take(count);
+                self.remaining -= count;
+                self.account(count, limit)?;
+                Ok(Some(piece))
+            }
+            BodyFraming::UntilEof => {
+                if self.buffer.is_empty() && !self.fill()? {
+                    return Ok(None);
+                }
+                let piece = self.take(self.buffer.len().min(4096));
+                self.account(piece.len(), limit)?;
+                Ok(Some(piece))
+            }
+            BodyFraming::Chunked => {
+                if self.chunk_done {
+                    return Ok(None);
+                }
+                if self.chunk_needs_crlf {
+                    self.ensure(2)?;
+                    if self.take(2) != b"\r\n" {
+                        return Err(HostError::sidecar_proxy_protocol_error());
+                    }
+                    self.chunk_needs_crlf = false;
+                }
+
+                if self.chunk_remaining == 0 {
+                    let line = self
+                        .read_line()?
+                        .ok_or(HostError::sidecar_proxy_protocol_error())?;
+                    let text = std::str::from_utf8(&line)
+                        .map_err(|_| HostError::sidecar_proxy_protocol_error())?;
+                    let size_text = text.split(';').next().unwrap_or("").trim();
+                    let size = usize::from_str_radix(size_text, 16)
+                        .map_err(|_| HostError::sidecar_proxy_protocol_error())?;
+                    if size == 0 {
+                        loop {
+                            let trailer = self
+                                .read_line()?
+                                .ok_or(HostError::sidecar_proxy_protocol_error())?;
+                            if trailer.is_empty() {
+                                self.chunk_done = true;
+                                return Ok(None);
+                            }
+                        }
+                    }
+                    if size > limit.saturating_sub(self.total) {
+                        return Err(HostError::sidecar_proxy_protocol_error());
+                    }
+                    self.chunk_remaining = size;
+                }
+
+                if self.buffer.is_empty() && !self.fill()? {
+                    return Err(HostError::sidecar_proxy_protocol_error());
+                }
+                let count = self.chunk_remaining.min(self.buffer.len()).min(4096);
+                let piece = self.take(count);
+                self.chunk_remaining -= count;
+                if self.chunk_remaining == 0 {
+                    self.chunk_needs_crlf = true;
+                }
+                self.account(count, limit)?;
+                Ok(Some(piece))
+            }
+        }
+    }
+
+    fn read_to_end(&mut self, limit: usize) -> Result<Vec<u8>, HostError> {
+        let mut result = Vec::new();
+        while let Some(piece) = self.next_piece(limit)? {
+            result.extend_from_slice(&piece);
+        }
+        Ok(result)
+    }
+}
+
+/// Sends a fixed loopback HTTP/1.1 POST request and returns after response
+/// headers, never after the response body.
 fn http_post(
     port: u16,
     path: &str,
@@ -113,9 +300,11 @@ fn http_post(
     close_connection: bool,
 ) -> Result<HttpResponse, HostError> {
     let addr = format!("{SIDECAR_HOST}:{port}");
-    let mut stream =
-        TcpStream::connect_timeout(&addr.parse().expect("loopback parse"), CONNECT_TIMEOUT)
-            .map_err(|_| HostError::sidecar_proxy_unavailable())?;
+    let socket = addr
+        .parse()
+        .map_err(|_| HostError::sidecar_proxy_unavailable())?;
+    let mut stream = TcpStream::connect_timeout(&socket, CONNECT_TIMEOUT)
+        .map_err(|_| HostError::sidecar_proxy_unavailable())?;
     stream
         .set_read_timeout(Some(READ_TIMEOUT))
         .map_err(|_| HostError::sidecar_proxy_unavailable())?;
@@ -139,168 +328,94 @@ fn http_post(
         .flush()
         .map_err(|_| HostError::sidecar_proxy_unavailable())?;
 
-    read_http_response(&mut stream)
-}
-
-/// Reads a complete HTTP/1.1 response from the stream.
-fn read_http_response(stream: &mut TcpStream) -> Result<HttpResponse, HostError> {
-    let mut raw = Vec::new();
-    let mut buf = [0u8; 4096];
-
-    // Read until we find the end of headers.
-    loop {
-        let n = stream
-            .read(&mut buf)
-            .map_err(|_| HostError::sidecar_proxy_unavailable())?;
-        if n == 0 {
-            return Err(HostError::sidecar_proxy_unavailable());
-        }
-        raw.extend_from_slice(&buf[..n]);
-        if raw.len() > MAX_HEADER_BYTES + MAX_JSON_BODY_BYTES {
-            return Err(HostError::sidecar_proxy_protocol_error());
-        }
-        if let Some(pos) = find_header_end(&raw) {
-            return parse_response(&raw, pos, stream);
-        }
-    }
+    read_http_response(stream)
 }
 
 fn find_header_end(raw: &[u8]) -> Option<usize> {
-    raw.windows(4).position(|w| w == b"\r\n\r\n")
+    raw.windows(4).position(|window| window == b"\r\n\r\n")
 }
 
-fn parse_response(
-    raw: &[u8],
-    header_end: usize,
-    stream: &mut TcpStream,
-) -> Result<HttpResponse, HostError> {
+/// Reads only the HTTP response headers. The returned BodyReader owns the
+/// socket and can be consumed incrementally by a background turn worker.
+fn read_http_response(mut stream: TcpStream) -> Result<HttpResponse, HostError> {
+    let mut raw = Vec::new();
+    let mut bytes = [0u8; 4096];
+    let header_end = loop {
+        let count = stream
+            .read(&mut bytes)
+            .map_err(|_| HostError::sidecar_proxy_unavailable())?;
+        if count == 0 {
+            return Err(HostError::sidecar_proxy_unavailable());
+        }
+        raw.extend_from_slice(&bytes[..count]);
+        if raw.len() > MAX_HEADER_BYTES {
+            return Err(HostError::sidecar_proxy_protocol_error());
+        }
+        if let Some(end) = find_header_end(&raw) {
+            break end;
+        }
+    };
+
     let header_text = std::str::from_utf8(&raw[..header_end])
         .map_err(|_| HostError::sidecar_proxy_protocol_error())?;
     let mut lines = header_text.split("\r\n");
     let status_line = lines
         .next()
         .ok_or(HostError::sidecar_proxy_protocol_error())?;
-    let status: u16 = status_line
-        .split_whitespace()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
+    let mut status_parts = status_line.split_whitespace();
+    let version = status_parts.next().unwrap_or("");
+    if version != "HTTP/1.0" && version != "HTTP/1.1" {
+        return Err(HostError::sidecar_proxy_protocol_error());
+    }
+    let status = status_parts
+        .next()
+        .and_then(|value| value.parse::<u16>().ok())
         .ok_or(HostError::sidecar_proxy_protocol_error())?;
 
     let mut headers = Vec::new();
     for line in lines {
-        if let Some((key, value)) = line.split_once(':') {
-            headers.push((key.trim().to_lowercase(), value.trim().to_string()));
+        let (key, value) = line
+            .split_once(':')
+            .ok_or(HostError::sidecar_proxy_protocol_error())?;
+        let key = key.trim();
+        if key.is_empty() {
+            return Err(HostError::sidecar_proxy_protocol_error());
         }
+        headers.push((key.to_ascii_lowercase(), value.trim().to_string()));
     }
-
-    let body_start = header_end + 4;
-    let initial_body = raw[body_start..].to_vec();
 
     let content_length = headers
         .iter()
-        .find(|(k, _)| k == "content-length")
-        .and_then(|(_, v)| v.parse::<usize>().ok());
-
-    let is_chunked = headers
+        .find(|(key, _)| key == "content-length")
+        .map(|(_, value)| {
+            value
+                .parse::<usize>()
+                .map_err(|_| HostError::sidecar_proxy_protocol_error())
+        })
+        .transpose()?;
+    let transfer_encoding = headers
         .iter()
-        .find(|(k, _)| k == "transfer-encoding")
-        .map(|(_, v)| v.to_lowercase().contains("chunked"))
-        .unwrap_or(false);
-
-    let body = if is_chunked {
-        read_chunked_body(stream, initial_body)?
-    } else if let Some(len) = content_length {
-        read_fixed_body(stream, initial_body, len)?
-    } else {
-        read_until_eof(stream, initial_body)?
+        .find(|(key, _)| key == "transfer-encoding")
+        .map(|(_, value)| value.to_ascii_lowercase());
+    if content_length.is_some() && transfer_encoding.is_some() {
+        return Err(HostError::sidecar_proxy_protocol_error());
+    }
+    let framing = match transfer_encoding.as_deref() {
+        Some("chunked") => BodyFraming::Chunked,
+        Some(_) => return Err(HostError::sidecar_proxy_protocol_error()),
+        None => match content_length {
+            Some(length) => BodyFraming::ContentLength(length),
+            None => BodyFraming::UntilEof,
+        },
     };
 
+    let body_start = header_end + 4;
+    let initial = raw[body_start..].to_vec();
     Ok(HttpResponse {
         status,
         headers,
-        body,
+        body: BodyReader::new(stream, initial, framing),
     })
-}
-
-fn read_fixed_body(
-    stream: &mut TcpStream,
-    mut body: Vec<u8>,
-    content_length: usize,
-) -> Result<Vec<u8>, HostError> {
-    if content_length > MAX_JSON_BODY_BYTES {
-        return Err(HostError::sidecar_proxy_protocol_error());
-    }
-    let mut buf = [0u8; 4096];
-    while body.len() < content_length {
-        let n = stream
-            .read(&mut buf)
-            .map_err(|_| HostError::sidecar_proxy_unavailable())?;
-        if n == 0 {
-            break;
-        }
-        body.extend_from_slice(&buf[..n]);
-    }
-    body.truncate(content_length);
-    Ok(body)
-}
-
-fn read_chunked_body(stream: &mut TcpStream, mut body: Vec<u8>) -> Result<Vec<u8>, HostError> {
-    let mut buf = [0u8; 4096];
-    let mut total = 0usize;
-    loop {
-        // Find the end of the current chunk header.
-        let chunk_header_end = body
-            .windows(2)
-            .position(|w| w == b"\r\n")
-            .ok_or(HostError::sidecar_proxy_protocol_error())?;
-        let chunk_header = std::str::from_utf8(&body[..chunk_header_end])
-            .map_err(|_| HostError::sidecar_proxy_protocol_error())?;
-        let chunk_size = usize::from_str_radix(chunk_header.trim(), 16)
-            .map_err(|_| HostError::sidecar_proxy_protocol_error())?;
-
-        if chunk_size == 0 {
-            return Ok(Vec::new());
-        }
-
-        total += chunk_size;
-        if total > MAX_NDJSON_TOTAL_BYTES {
-            return Err(HostError::sidecar_proxy_protocol_error());
-        }
-
-        // We need chunk_size + 2 bytes (\r\n) after the header.
-        let needed = chunk_header_end + 2 + chunk_size + 2;
-        while body.len() < needed {
-            let n = stream
-                .read(&mut buf)
-                .map_err(|_| HostError::sidecar_proxy_unavailable())?;
-            if n == 0 {
-                return Err(HostError::sidecar_proxy_protocol_error());
-            }
-            body.extend_from_slice(&buf[..n]);
-        }
-
-        // For streaming we return just the chunk data; the caller handles NDJSON.
-        let data_start = chunk_header_end + 2;
-        let data_end = data_start + chunk_size;
-        return Ok(body[data_start..data_end].to_vec());
-    }
-}
-
-fn read_until_eof(stream: &mut TcpStream, mut body: Vec<u8>) -> Result<Vec<u8>, HostError> {
-    let mut buf = [0u8; 4096];
-    loop {
-        let n = stream
-            .read(&mut buf)
-            .map_err(|_| HostError::sidecar_proxy_unavailable())?;
-        if n == 0 {
-            break;
-        }
-        body.extend_from_slice(&buf[..n]);
-        if body.len() > MAX_JSON_BODY_BYTES {
-            return Err(HostError::sidecar_proxy_protocol_error());
-        }
-    }
-    Ok(body)
 }
 
 /// Parses a session from the sidecar's JSON response.
@@ -399,7 +514,7 @@ fn validate_agent_event(event: &Value, turn_id: &str) -> Result<(), HostError> {
         "tool_call" => {
             if obj.get("id").and_then(Value::as_str).is_none()
                 || obj.get("name").and_then(Value::as_str).is_none()
-                || obj.get("input").is_none()
+                || !obj.get("input").is_some_and(Value::is_object)
             {
                 return Err(HostError::sidecar_proxy_protocol_error());
             }
@@ -456,107 +571,176 @@ fn is_terminal_event(event: &Value) -> bool {
     )
 }
 
+struct NdjsonReader {
+    body: BodyReader,
+    line: Vec<u8>,
+}
+
+impl NdjsonReader {
+    fn new(body: BodyReader) -> Self {
+        Self {
+            body,
+            line: Vec::new(),
+        }
+    }
+
+    fn next_event(&mut self, turn_id: &str) -> Result<Option<Value>, HostError> {
+        loop {
+            if let Some(end) = self.line.iter().position(|byte| *byte == b'\n') {
+                let mut line: Vec<u8> = self.line.drain(..=end).collect();
+                line.pop();
+                if line.last() == Some(&b'\r') {
+                    line.pop();
+                }
+                if line.is_empty() {
+                    continue;
+                }
+                let text = std::str::from_utf8(&line)
+                    .map_err(|_| HostError::sidecar_proxy_protocol_error())?;
+                let event = serde_json::from_str(text)
+                    .map_err(|_| HostError::sidecar_proxy_protocol_error())?;
+                validate_agent_event(&event, turn_id)?;
+                return Ok(Some(event));
+            }
+
+            if self.line.len() > MAX_NDJSON_LINE_BYTES {
+                return Err(HostError::sidecar_proxy_protocol_error());
+            }
+            match self.body.next_piece(MAX_NDJSON_TOTAL_BYTES)? {
+                Some(piece) => {
+                    self.line.extend_from_slice(&piece);
+                    if self.line.len() > MAX_NDJSON_LINE_BYTES {
+                        return Err(HostError::sidecar_proxy_protocol_error());
+                    }
+                }
+                None => {
+                    if self.line.is_empty() {
+                        return Ok(None);
+                    }
+                    return Err(HostError::sidecar_proxy_protocol_error());
+                }
+            }
+        }
+    }
+}
+
+fn fixed_stream_error(turn_id: &str) -> Value {
+    serde_json::json!({
+        "type": "error",
+        "requestId": turn_id,
+        "code": "gateway_error",
+        "message": "Model gateway request failed.",
+        "retryable": false,
+    })
+}
+
+fn emit_fixed_stream_error(
+    sink: &dyn NativeEventSink,
+    session_id: &str,
+    turn_id: &str,
+) -> Result<(), HostError> {
+    sink.emit(session_id, turn_id, &fixed_stream_error(turn_id))
+}
+
+fn sanitize_event(event: &Value, turn_id: &str) -> Value {
+    if event.get("type").and_then(Value::as_str) != Some("error") {
+        return event.clone();
+    }
+    let code = event.get("code").and_then(Value::as_str).unwrap_or("");
+    let (safe_code, message) = match code {
+        "aborted" => ("aborted", "Request aborted."),
+        "runner_error" => ("runner_error", "Agent runner failed."),
+        "rate_limited" => ("rate_limited", "Model gateway request failed."),
+        "upstream_unavailable" => ("upstream_unavailable", "Model gateway request failed."),
+        "provider_protocol_error" => ("provider_protocol_error", "Model gateway request failed."),
+        _ => ("gateway_error", "Model gateway request failed."),
+    };
+    serde_json::json!({
+        "type": "error",
+        "requestId": turn_id,
+        "code": safe_code,
+        "message": message,
+        "retryable": event.get("retryable").and_then(Value::as_bool).unwrap_or(false),
+    })
+}
+
+struct StreamStart {
+    ready: mpsc::Receiver<Result<(), HostError>>,
+    release: mpsc::Sender<()>,
+}
+
 /// The production Node sidecar proxy backend.
 pub struct NodeSidecarBackend {
     port: u16,
-    sink: Box<dyn NativeEventSink>,
+    sink: Arc<dyn NativeEventSink>,
 }
 
 impl NodeSidecarBackend {
     pub fn new(port: u16, sink: Box<dyn NativeEventSink>) -> Self {
-        Self { port, sink }
+        Self {
+            port,
+            sink: Arc::from(sink),
+        }
     }
 
-    /// Reads NDJSON events from a chunked/Content-Length response body and
-    /// emits them through the sink. Returns after the first terminal event
-    /// or EOF.
-    fn stream_ndjson_events(
+    /// Streams the body in a detached worker. The first event is validated
+    /// before the command returns, but is released only after the caller has
+    /// received the turn id so the renderer cannot filter it out accidentally.
+    fn spawn_stream_worker(
         &self,
-        session_id: &str,
-        turn_id: &str,
-        body: Vec<u8>,
-    ) -> Result<(), HostError> {
-        let text = String::from_utf8(body).map_err(|_| {
-            // Invalid UTF-8: emit a fixed safe error and stop.
-            let _ = self.sink.emit(
-                session_id,
-                turn_id,
-                &serde_json::json!({
-                    "type": "error",
-                    "requestId": turn_id,
-                    "code": "gateway_error",
-                    "message": "Model gateway request failed.",
-                    "retryable": false,
-                }),
-            );
-            HostError::sidecar_proxy_protocol_error()
+        session_id: String,
+        turn_id: String,
+        body: BodyReader,
+    ) -> StreamStart {
+        let (ready_sender, ready_receiver) = mpsc::sync_channel(1);
+        let (release_sender, release_receiver) = mpsc::channel();
+        let sink = Arc::clone(&self.sink);
+        thread::spawn(move || {
+            let mut reader = NdjsonReader::new(body);
+            let first = reader.next_event(&turn_id);
+            match first {
+                Ok(Some(event)) => {
+                    if ready_sender.send(Ok(())).is_err() {
+                        return;
+                    }
+                    if release_receiver.recv().is_err() {
+                        return;
+                    }
+                    let safe = sanitize_event(&event, &turn_id);
+                    if sink.emit(&session_id, &turn_id, &safe).is_err() {
+                        return;
+                    }
+                    if is_terminal_event(&safe) {
+                        return;
+                    }
+
+                    loop {
+                        match reader.next_event(&turn_id) {
+                            Ok(Some(event)) => {
+                                let safe = sanitize_event(&event, &turn_id);
+                                if sink.emit(&session_id, &turn_id, &safe).is_err() {
+                                    return;
+                                }
+                                if is_terminal_event(&safe) {
+                                    return;
+                                }
+                            }
+                            Ok(None) | Err(_) => {
+                                let _ = emit_fixed_stream_error(&*sink, &session_id, &turn_id);
+                                return;
+                            }
+                        }
+                    }
+                }
+                Ok(None) | Err(_) => {
+                    let _ = ready_sender.send(Err(HostError::sidecar_proxy_protocol_error()));
+                }
+            }
         });
-
-        let text = match text {
-            Ok(t) => t,
-            Err(error) => return Err(error),
-        };
-
-        let mut saw_terminal = false;
-        let mut total_bytes = 0usize;
-
-        for line in text.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            total_bytes += line.len();
-            if total_bytes > MAX_NDJSON_TOTAL_BYTES {
-                return Err(HostError::sidecar_proxy_protocol_error());
-            }
-            if line.len() > MAX_NDJSON_LINE_BYTES {
-                return Err(HostError::sidecar_proxy_protocol_error());
-            }
-
-            let event: Value = serde_json::from_str(line).map_err(|_| {
-                let _ = self.sink.emit(
-                    session_id,
-                    turn_id,
-                    &serde_json::json!({
-                        "type": "error",
-                        "requestId": turn_id,
-                        "code": "gateway_error",
-                        "message": "Model gateway request failed.",
-                        "retryable": false,
-                    }),
-                );
-                HostError::sidecar_proxy_protocol_error()
-            })?;
-
-            validate_agent_event(&event, turn_id)?;
-
-            if saw_terminal {
-                return Err(HostError::sidecar_proxy_protocol_error());
-            }
-
-            self.sink.emit(session_id, turn_id, &event)?;
-
-            if is_terminal_event(&event) {
-                saw_terminal = true;
-            }
+        StreamStart {
+            ready: ready_receiver,
+            release: release_sender,
         }
-
-        if !saw_terminal {
-            // EOF without a terminal event: emit a fixed safe error.
-            self.sink.emit(
-                session_id,
-                turn_id,
-                &serde_json::json!({
-                    "type": "error",
-                    "requestId": turn_id,
-                    "code": "gateway_error",
-                    "message": "Model gateway request failed.",
-                    "retryable": false,
-                }),
-            )?;
-        }
-
-        Ok(())
     }
 }
 
@@ -576,11 +760,12 @@ fn encode_path_segment(value: &str) -> String {
 
 impl HostBackend for NodeSidecarBackend {
     fn create_session(&self) -> Result<CreateSessionResponse, HostError> {
-        let response = http_post(self.port, "/v1/sessions", "{}", false)?;
+        let mut response = http_post(self.port, "/v1/sessions", "{}", true)?;
         if response.status < 200 || response.status >= 300 {
             return Err(HostError::sidecar_proxy_http_error());
         }
-        parse_session_response(&response.body)
+        let body = response.body.read_to_end(MAX_JSON_BODY_BYTES)?;
+        parse_session_response(&body)
     }
 
     fn start_turn(
@@ -613,13 +798,14 @@ impl HostBackend for NodeSidecarBackend {
             .ok_or(HostError::sidecar_proxy_protocol_error())?
             .to_string();
 
-        // Stream events in the background after returning the turnId.
-        // For the synchronous HostBackend trait, we stream inline after
-        // extracting the turnId. The Tauri command returns the turnId;
-        // events are emitted during this call.
-        self.stream_ndjson_events(session_id, &turn_id, response.body)?;
-
-        StartTurnResponse::new(turn_id)
+        let stream =
+            self.spawn_stream_worker(session_id.to_string(), turn_id.clone(), response.body);
+        match stream.ready.recv_timeout(READ_TIMEOUT) {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => return Err(error),
+            Err(_) => return Err(HostError::sidecar_proxy_unavailable()),
+        }
+        StartTurnResponse::with_stream_release(turn_id, stream.release)
     }
 
     fn cancel_turn(
@@ -628,13 +814,14 @@ impl HostBackend for NodeSidecarBackend {
         turn_id: &str,
     ) -> Result<CancelTurnResponse, HostError> {
         let path = format!("/v1/sessions/{}/cancel", encode_path_segment(session_id));
-        let response = http_post(self.port, &path, "{}", false)?;
+        let mut response = http_post(self.port, &path, "{}", true)?;
         if response.status < 200 || response.status >= 300 {
             return Err(HostError::sidecar_proxy_http_error());
         }
 
-        let text = std::str::from_utf8(&response.body)
-            .map_err(|_| HostError::sidecar_proxy_protocol_error())?;
+        let body = response.body.read_to_end(MAX_JSON_BODY_BYTES)?;
+        let text =
+            std::str::from_utf8(&body).map_err(|_| HostError::sidecar_proxy_protocol_error())?;
         let value: Value =
             serde_json::from_str(text).map_err(|_| HostError::sidecar_proxy_protocol_error())?;
         let obj = value
@@ -652,6 +839,98 @@ impl HostBackend for NodeSidecarBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::{mpsc, Arc, Mutex};
+    use std::thread;
+    use std::time::Duration;
+
+    #[derive(Clone)]
+    struct SharedSink {
+        events: Arc<Mutex<Vec<(String, String, Value)>>>,
+    }
+
+    impl SharedSink {
+        fn new() -> Self {
+            Self {
+                events: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+
+        fn events(&self) -> Vec<(String, String, Value)> {
+            self.events.lock().expect("events lock").clone()
+        }
+    }
+
+    impl NativeEventSink for SharedSink {
+        fn emit(&self, session_id: &str, turn_id: &str, event: &Value) -> Result<(), HostError> {
+            self.events.lock().expect("events lock").push((
+                session_id.to_string(),
+                turn_id.to_string(),
+                event.clone(),
+            ));
+            Ok(())
+        }
+    }
+
+    fn read_request_headers(stream: &mut std::net::TcpStream) {
+        let mut bytes = Vec::new();
+        let mut buffer = [0u8; 1024];
+        while !bytes.windows(4).any(|window| window == b"\r\n\r\n") {
+            let count = stream.read(&mut buffer).expect("request read");
+            if count == 0 {
+                break;
+            }
+            bytes.extend_from_slice(&buffer[..count]);
+        }
+    }
+
+    fn spawn_chunked_turn(
+        chunks: Vec<Vec<u8>>,
+        release_after_first: Option<mpsc::Receiver<()>>,
+    ) -> (u16, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("address").port();
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            read_request_headers(&mut stream);
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nx-agent-turn-id: turn-1\r\nConnection: close\r\n\r\n",
+                )
+                .expect("headers");
+            for (index, chunk) in chunks.iter().enumerate() {
+                write!(stream, "{:X}\r\n", chunk.len()).expect("chunk header");
+                stream.write_all(chunk).expect("chunk body");
+                stream.write_all(b"\r\n").expect("chunk delimiter");
+                stream.flush().expect("flush");
+                if index == 0 {
+                    if let Some(release) = release_after_first.as_ref() {
+                        let _ = release.recv();
+                    }
+                }
+            }
+            let _ = stream.write_all(b"0\r\n\r\n");
+        });
+        (port, handle)
+    }
+
+    fn spawn_headers_only_error() -> (u16, mpsc::Sender<()>, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let port = listener.local_addr().expect("address").port();
+        let (release_sender, release_receiver) = mpsc::channel();
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            read_request_headers(&mut stream);
+            stream
+                .write_all(
+                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 17825792\r\nConnection: close\r\n\r\n",
+                )
+                .expect("headers");
+            let _ = release_receiver.recv();
+        });
+        (port, release_sender, handle)
+    }
 
     #[test]
     fn encode_path_segment_encodes_special_characters() {
@@ -760,5 +1039,108 @@ mod tests {
         assert_eq!(events[0].0, "s1");
         assert_eq!(events[0].1, "t1");
         assert_eq!(events[0].2, event);
+    }
+
+    #[test]
+    fn start_turn_returns_after_first_event_without_waiting_for_stream_end() {
+        let route = serde_json::json!({
+            "type": "route_selected",
+            "requestId": "turn-1",
+            "routeId": "route-1",
+            "model": "model-1"
+        });
+        let text = serde_json::json!({
+            "type": "text_delta",
+            "requestId": "turn-1",
+            "text": "hello"
+        });
+        let completed = serde_json::json!({
+            "type": "completed",
+            "requestId": "turn-1"
+        });
+        let (release_sender, release_receiver) = mpsc::channel();
+        let (port, server) = spawn_chunked_turn(
+            vec![
+                format!("{}\n", route).into_bytes(),
+                format!("{}\n", text).into_bytes(),
+                format!("{}\n", completed).into_bytes(),
+            ],
+            Some(release_receiver),
+        );
+        let sink = SharedSink::new();
+        let backend = Arc::new(NodeSidecarBackend::new(port, Box::new(sink.clone())));
+        let (result_sender, result_receiver) = mpsc::channel();
+        let request = serde_json::json!({
+            "messages": [{ "role": "user", "content": "hello" }]
+        });
+        let backend_for_thread = backend.clone();
+        thread::spawn(move || {
+            let result = backend_for_thread.start_turn("session-1", &request);
+            result_sender.send(result).expect("result");
+        });
+
+        let response = result_receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("start_turn must return after the first event")
+            .expect("typed turn response");
+        assert_eq!(
+            serde_json::to_value(&response).expect("serialize"),
+            serde_json::json!({ "turnId": "turn-1" })
+        );
+        assert!(
+            sink.events().is_empty(),
+            "first event waits for command return"
+        );
+        drop(response);
+
+        release_sender.send(()).expect("release stream");
+        for _ in 0..20 {
+            if sink.events().len() == 3 {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        let events = sink.events();
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0].2, route);
+        assert_eq!(events[1].2, text);
+        assert_eq!(events[2].2, completed);
+        server.join().expect("server");
+    }
+
+    #[test]
+    fn non_success_response_is_returned_without_reading_its_body() {
+        let (port, release, server) = spawn_headers_only_error();
+        let sink = SharedSink::new();
+        let backend = Arc::new(NodeSidecarBackend::new(port, Box::new(sink)));
+        let backend_for_thread = backend.clone();
+        let (result_sender, result_receiver) = mpsc::channel();
+        thread::spawn(move || {
+            result_sender
+                .send(backend_for_thread.create_session())
+                .expect("result");
+        });
+
+        let result = result_receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("non-success status must not wait for body");
+        assert_eq!(result, Err(HostError::sidecar_proxy_http_error()));
+        let _ = release.send(());
+        server.join().expect("server");
+    }
+
+    #[test]
+    fn tool_call_input_must_be_an_object_at_the_native_boundary() {
+        let event = serde_json::json!({
+            "type": "tool_call",
+            "requestId": "turn-1",
+            "id": "call-1",
+            "name": "read_file",
+            "input": []
+        });
+        assert_eq!(
+            validate_agent_event(&event, "turn-1"),
+            Err(HostError::sidecar_proxy_protocol_error())
+        );
     }
 }

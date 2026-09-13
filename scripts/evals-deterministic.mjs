@@ -299,6 +299,13 @@ const required = [
   "tests/task-23-sidecar-lifecycle.test.ts",
   "tests/task-23-renderer-boundary.test.ts",
   "tests/task-23-tauri-integration.test.ts",
+  "tests/task-24-native-proxy.test.ts",
+  "tests/task-24-native-proxy-security.test.ts",
+  "tests/task-24-native-proxy-streaming.test.ts",
+  "tests/task-24-native-proxy-cancellation.test.ts",
+  "tests/task-24-native-proxy-integration.test.ts",
+  "docs/native-proxy.md",
+  "docs/verification/task-24-report.md",
 ];
 
 for (const path of required) {
@@ -517,6 +524,14 @@ runScenario("task 23 tauri sidecar and loopback connection", [
   "tests/task-23-renderer-boundary.test.ts",
   "tests/task-23-tauri-integration.test.ts",
 ]);
+
+runScenario("task 24 native sidecar proxy", [
+  "tests/task-24-native-proxy.test.ts",
+  "tests/task-24-native-proxy-security.test.ts",
+  "tests/task-24-native-proxy-streaming.test.ts",
+  "tests/task-24-native-proxy-cancellation.test.ts",
+  "tests/task-24-native-proxy-integration.test.ts",
+]);
 console.log(
   [
     "evals:deterministic passed.",
@@ -614,11 +629,17 @@ console.log(
     "completed events, and fixes terminal error session status. All provider HTTP stays",
     "behind the injected fake client in offline scenarios; no real provider, credential,",
     "model call or network access exists.",
-  "Task 23 adds the native Node sidecar supervisor: Tauri setup owns one validated",
+    "Task 23 adds the native Node sidecar supervisor: Tauri setup owns one validated",
   "loopback child while the renderer stays on the existing validated Tauri IPC bridge,",
   "startup health requires the exact local /health response, and stop propagates kill",
     "or wait failures instead of claiming success. Child output is discarded to avoid",
     "pipe backpressure; exit cleanup is idempotent and concurrent lifecycle operations",
     "are serialized. No remote network, provider call or credential access is performed.",
+    "Task 24 adds the native loopback proxy: Rust reads only HTTP headers before",
+    "returning the typed turn id, then incrementally parses bounded NDJSON in a",
+    "background worker and emits through the official Tauri event sink. Non-2xx bodies",
+    "are not consumed, event payloads are fail-closed, and the typed response release",
+    "guard keeps the renderer response ahead of the first turn event. Native tests",
+    "use loopback fixtures only; no external provider or credential access is performed.",
   ].join(" "),
 );

@@ -28,11 +28,15 @@ Node API 在 turn 流式响应中返回 `x-agent-turn-id` header。Rust proxy �
 
 ## 事件流
 
-- NDJSON 增量解析
+- HTTP 响应先读取并校验 headers；成功 turn 的 body 交给独立 worker，`agent_start_turn` 不等待 EOF
+- worker 按 chunked / `Content-Length` / EOF framing 增量读取 NDJSON，不会把整个 turn 收集到内存
+- 首个事件先完成协议校验；typed `{ turnId }` 响应序列化完成后才释放首事件，避免 Renderer 先收到事件却尚未拿到 turn id
 - 事件通过 `NativeEventSink` 抽象发布（生产用 Tauri `emit`，测试用 recording fake）
 - 每个事件恰好三个字段：`sessionId`、`turnId`、`event`
 - terminal event（completed/error）后停止
 - EOF 无 terminal → 固定安全 error
+- 非 2xx 只根据 status 返回固定 HTTP 错误，不读取响应 body
+- NDJSON 单行上限 256 KiB、总量上限 16 MiB；非法 UTF-8、JSON 或事件结构均折叠为固定协议错误
 
 ## 安全边界
 

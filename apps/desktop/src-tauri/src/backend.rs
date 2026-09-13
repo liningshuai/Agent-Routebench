@@ -14,6 +14,7 @@
 //! become an open success output.
 
 use serde::Serialize;
+use std::sync::mpsc;
 
 use crate::errors::HostError;
 
@@ -101,11 +102,21 @@ impl CreateSessionResponse {
 }
 
 /// Success payload of `agent_start_turn`: exactly one `turnId` field.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartTurnResponse {
     turn_id: String,
+    #[serde(skip)]
+    stream_release: Option<mpsc::Sender<()>>,
 }
+
+impl PartialEq for StartTurnResponse {
+    fn eq(&self, other: &Self) -> bool {
+        self.turn_id == other.turn_id
+    }
+}
+
+impl Eq for StartTurnResponse {}
 
 #[allow(dead_code)]
 impl StartTurnResponse {
@@ -114,7 +125,35 @@ impl StartTurnResponse {
         if turn_id.is_empty() {
             return Err(HostError::invalid_response());
         }
-        Ok(Self { turn_id })
+        Ok(Self {
+            turn_id,
+            stream_release: None,
+        })
+    }
+
+    /// Attaches a one-shot release to a response whose serialized value must
+    /// reach the IPC caller before its background stream starts emitting.
+    /// The release is intentionally skipped by serde and is consumed on drop
+    /// after the command framework has serialized the typed response.
+    pub(crate) fn with_stream_release(
+        turn_id: String,
+        release: mpsc::Sender<()>,
+    ) -> Result<Self, HostError> {
+        if turn_id.is_empty() {
+            return Err(HostError::invalid_response());
+        }
+        Ok(Self {
+            turn_id,
+            stream_release: Some(release),
+        })
+    }
+}
+
+impl Drop for StartTurnResponse {
+    fn drop(&mut self) {
+        if let Some(release) = self.stream_release.take() {
+            let _ = release.send(());
+        }
     }
 }
 
