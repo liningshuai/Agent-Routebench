@@ -19,6 +19,10 @@ pub const SIDECAR_HEALTH_TIMEOUT: &str = "sidecar_health_timeout";
 pub const SIDECAR_NOT_READY: &str = "sidecar_not_ready";
 pub const SIDECAR_STOP_FAILED: &str = "sidecar_stop_failed";
 pub const INVALID_SIDECAR_OPTIONS: &str = "invalid_sidecar_options";
+pub const SIDECAR_PROXY_UNAVAILABLE: &str = "sidecar_proxy_unavailable";
+pub const SIDECAR_PROXY_HTTP_ERROR: &str = "sidecar_proxy_http_error";
+pub const SIDECAR_PROXY_PROTOCOL_ERROR: &str = "sidecar_proxy_protocol_error";
+pub const SIDECAR_PROXY_ABORTED: &str = "sidecar_proxy_aborted";
 
 /// A fixed, serializable host error. Only `code` and `message` are exposed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -91,6 +95,29 @@ impl HostError {
     /// The sidecar launch configuration is invalid.
     pub const fn invalid_sidecar_options() -> Self {
         Self::new(INVALID_SIDECAR_OPTIONS, "Sidecar options are invalid.")
+    }
+
+    /// The sidecar proxy is unavailable.
+    pub const fn sidecar_proxy_unavailable() -> Self {
+        Self::new(SIDECAR_PROXY_UNAVAILABLE, "Sidecar proxy is unavailable.")
+    }
+
+    /// The sidecar proxy request failed with a non-2xx status.
+    pub const fn sidecar_proxy_http_error() -> Self {
+        Self::new(SIDECAR_PROXY_HTTP_ERROR, "Sidecar proxy request failed.")
+    }
+
+    /// The sidecar proxy response is invalid.
+    pub const fn sidecar_proxy_protocol_error() -> Self {
+        Self::new(
+            SIDECAR_PROXY_PROTOCOL_ERROR,
+            "Sidecar proxy response is invalid.",
+        )
+    }
+
+    /// The sidecar proxy request was aborted.
+    pub const fn sidecar_proxy_aborted() -> Self {
+        Self::new(SIDECAR_PROXY_ABORTED, "Sidecar proxy request was aborted.")
     }
 }
 

@@ -802,3 +802,29 @@ Tauri Native Host
 - Tauri setup 持有 sidecar；应用退出回调负责 stop；Renderer 仍通过既有、已校验的 Tauri `DesktopApiClient` 访问
 - NotReady Host 的 turn 产生既有固定 `runner_error`，不伪造 `completed`
 - 详见 [Task 23 原始报告](verification/task-23-report.md) 与 [Task 23 返工报告](verification/task-23-rework-report.md)。
+
+
+### Task 24（已完成：Tauri Native Proxy）
+
+新增 `NodeSidecarBackend`：Tauri Rust Host → Node sidecar → Local Agent API 的原生代理。
+
+```text
+Desktop Renderer
+  ↓ Tauri invoke/listen
+Rust Tauri Host (NodeSidecarBackend)
+  ↓ fixed loopback HTTP/1.1
+Node Local Agent Host
+  ↓ Local Agent API
+Agent Backend / NotReady boundary
+```
+
+边界：
+
+- `agent_create_session` 通过 sidecar 创建真实 Session
+- `agent_start_turn` 通过 sidecar 获取真实 turnId（`x-agent-turn-id` header）
+- NDJSON 事件增量发布到 `agent_turn_event`
+- `agent_cancel_turn` 真实转发到 sidecar
+- 仅连接 `127.0.0.1`；无 shell、无外部网络
+- 错误消息固定，不回显路径/端口/URL/异常
+- NotReady Host 的 turn 产生固定 `runner_error`，不伪造 `completed`
+- 详见 [Native Proxy](native-proxy.md) 与 [Task 24 报告](verification/task-24-report.md)。

@@ -1,10 +1,12 @@
 mod backend;
 mod commands;
 mod errors;
+mod proxy;
 mod runtime;
 pub mod sidecar;
 mod validation;
 
+use proxy::{NodeSidecarBackend, TauriEventSink};
 use sidecar::{
     NodeHostSupervisor, SidecarLaunchConfig, SIDECAR_DEFAULT_PORT, SIDECAR_LOOPBACK_HOST,
 };
@@ -40,9 +42,14 @@ pub fn run() {
         .setup(|app| {
             let supervisor = create_sidecar_supervisor(app)?;
             app.manage(supervisor);
+
+            // Wire the production runtime to the Node sidecar proxy.
+            let sink = TauriEventSink::new(app.handle().clone());
+            let backend = NodeSidecarBackend::new(SIDECAR_DEFAULT_PORT, Box::new(sink));
+            let runtime = runtime::HostRuntime::with_backend(std::sync::Arc::new(backend));
+            app.manage(runtime);
             Ok(())
         })
-        .manage(HostRuntime::not_ready())
         .invoke_handler(tauri::generate_handler![
             commands::agent_health,
             commands::agent_create_session,
@@ -59,5 +66,3 @@ pub fn run() {
             }
         });
 }
-
-use runtime::HostRuntime;

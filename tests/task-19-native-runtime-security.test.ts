@@ -149,8 +149,11 @@ describe("Task 19: runtime isolation", () => {
 
   test("fake backends cannot become the production default", () => {
     const lib = rustFile("lib.rs");
-    expect(lib).not.toContain("with_backend");
-    expect(lib).toContain("HostRuntime::not_ready()");
+    // Production now uses NodeSidecarBackend, not a fake or NotReadyBackend.
+    expect(lib).toContain("NodeSidecarBackend");
+    expect(lib).not.toContain("TestBackend");
+    expect(lib).not.toContain("RecordingBackend");
+    expect(lib).not.toContain("HostRuntime::not_ready()");
   });
 });
 

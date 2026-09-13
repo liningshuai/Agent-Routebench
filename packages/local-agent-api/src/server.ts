@@ -368,6 +368,7 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
     res.writeHead(200, {
       "content-type": "application/x-ndjson; charset=utf-8",
       "cache-control": "no-store",
+      "x-agent-turn-id": turnId,
     });
 
     let sawTerminal = false;

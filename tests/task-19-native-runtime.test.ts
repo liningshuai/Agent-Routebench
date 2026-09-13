@@ -84,18 +84,21 @@ describe("Task 19: HostRuntime container", () => {
     expect(runtime).toMatch(/fn\s+backend\s*\(\s*&self\s*\)\s*->\s*&(?:dyn\s+)?HostBackend/);
   });
 
-  test("lib.rs registers the default not-ready runtime as Tauri state", () => {
+  test("lib.rs registers a production runtime with the Node sidecar proxy", () => {
     const lib = rustFile("lib.rs");
-    expect(lib).toContain(".manage(HostRuntime::not_ready())");
     expect(lib).toContain("mod backend;");
     expect(lib).toContain("mod runtime;");
+    expect(lib).toContain("mod proxy;");
+    expect(lib).toContain("NodeSidecarBackend");
+    expect(lib).toContain("HostRuntime::with_backend");
   });
 
   test("lib.rs registers the runtime and the sidecar as separate Tauri states", () => {
     const lib = rustFile("lib.rs");
     expect(lib).not.toContain("TestBackend");
-    expect(lib.match(/\.manage\(HostRuntime::not_ready\(\)\)/g)).toHaveLength(1);
+    expect(lib).not.toContain("HostRuntime::not_ready()");
     expect(lib.match(/app\.manage\(supervisor\)/g)).toHaveLength(1);
+    expect(lib.match(/app\.manage\(runtime\)/g)).toHaveLength(1);
   });
 
   test("no global mutable backend state exists in the Rust host", () => {
