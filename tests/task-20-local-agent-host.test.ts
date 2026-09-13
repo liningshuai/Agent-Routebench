@@ -173,5 +173,7 @@ describe("Task 20: current-state documentation", () => {
     expect(deterministicEvaluation).toContain("Task 20 is complete; Task 21 has assembled the Node backend.");
     expect(readme).toContain("在 Task 19 检查点 Task 20/21 尚未开始");
     expect(readme).toContain("Task 21 已完成 Node 侧 Backend 组装");
+    expect(readme.match(/\*\*Task 20：Loopback Local Agent API Host 入口与生命周期\*\*/g)).toHaveLength(1);
+    expect(readme).not.toContain("宿主：Loopback Local Agent API Host 入口与生命周期**。新增独立 workspace app");
   });
 });

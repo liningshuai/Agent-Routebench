@@ -14,7 +14,7 @@
 - 无第三方运行时依赖、无 fetch/node:http/node:fs/process.env/子进程；凭据只在 Gateway 单次认证头内短暂出现
 - 未实现：真实 Provider E2E、真实 API Key 验证、Tauri Rust 宿主与 Backend 的跨进程连接、Memory/Session Persistence 集成
 
-**Task 20：Loopback Local Agent API Host 入口与生命周期**。新增独立 workspace app `@agent-workbench/local-agent-host`，复用 Task 9 服务器实现提供仅回环的 Local Agent API 宿主：Loopback Local Agent API Host 入口与生命周期**。新增独立 workspace app
+**Task 20：Loopback Local Agent API Host 入口与生命周期**。新增独立 workspace app
 `@agent-workbench/local-agent-host`，复用 Task 9 服务器实现提供仅回环的 Local Agent API 宿主：
 
 - 参数校验：host 仅允许 `127.0.0.1` / `localhost`，port 必须是 1–65535 整数；错误固定、不回显输入

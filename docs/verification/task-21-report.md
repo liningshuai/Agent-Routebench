@@ -13,7 +13,7 @@
 - `packages/agent-backend/package.json`、`tsconfig.json`
 - `packages/agent-backend/src/types.ts`、`errors.ts`、`validation.ts`、`request.ts`、`events.ts`、`backend.ts`、`index.ts`
 - `tests/helpers/agent-backend-fixtures.ts`
-- `tests/task-21-agent-backend.test.ts`（16）、`tests/task-21-agent-backend-streaming.test.ts`（13）、`tests/task-21-agent-backend-security.test.ts`（13）、`tests/task-21-agent-backend-integration.test.ts`（8）、`tests/task-21-agent-backend-cancellation.test.ts`（9）
+- `tests/task-21-agent-backend.test.ts`（16）、`tests/task-21-agent-backend-streaming.test.ts`（13）、`tests/task-21-agent-backend-security.test.ts`（14）、`tests/task-21-agent-backend-integration.test.ts`（8）、`tests/task-21-agent-backend-cancellation.test.ts`（10）
 - `docs/agent-backend.md`、`docs/verification/task-21-report.md`（本文件）
 
 修改：
@@ -68,7 +68,7 @@ unhandled rejection。证据：streaming 测试
 真实回归测试：integration 的 `a streamed terminal error event leaves the session
 failed`（此前状态为 completed）、`a client-side abort leaves the session cancelled`、
 `a normal completed turn leaves the session completed`。Task 9（65）/13（131）/
-16（62）/20（47）回归全部通过。
+16（62）/20（48）回归全部通过。
 
 ## 7. 取消与释放证据
 
@@ -84,8 +84,8 @@ promptly`（gated source + abort <2s）、`cancelling during a pending tool exec
 - **Red**：实现前 `corepack pnpm test tests/task-21-*.test.ts` 退出码 1，5 个套件
   全部收集失败：`Cannot find module '../packages/agent-backend/src/index.js'` ——
   模块缺失（能力缺失），非拼写/路径错误（路径已核对）。
-- **Green**：实现后聚焦 61 passed（16+13+13+8+9 + 后补 2 个 resilience 测试）；
-  全量 89 文件 / 1694 测试通过。
+- **Green**：实现后聚焦 61 passed（16+13+14+8+10）；
+  全量 89 文件 / 1695 测试通过。
 
 ## 9. 受控变异（12 项执行；11 检出 / 1 未检出）
 
@@ -117,7 +117,7 @@ Task 21 聚焦 61 passed 复验绿色；残留扫描无变异痕迹。
 | 4 | `corepack pnpm test tests/task-21-*.test.ts` | 0 | 61 passed |
 | 5 | `corepack pnpm test tests/task-9-*.test.ts` | 0 | 65 passed |
 | 6 | `corepack pnpm test tests/task-13-*.test.ts` / `task-16-*` / `task-20-*` | 0 | 239 passed |
-| 7 | `corepack pnpm test` | 0 | 89 文件 / 1694 测试 |
+| 7 | `corepack pnpm test` | 0 | 89 文件 / 1695 测试 |
 | 8 | `corepack pnpm security:scan` | 0 | 335 files scanned |
 | 9 | `corepack pnpm evals:deterministic` | 0 | 19 场景 + cargo target 检查 |
 | 10 | `git diff --check` / `git diff --cached --check` | 0 | |
