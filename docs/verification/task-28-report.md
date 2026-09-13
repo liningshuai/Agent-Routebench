@@ -354,21 +354,27 @@ HTTP、真实 Host 生命周期、真实 jsdom DOM、真实 cargo 单元测试�
 
 ## 12. Git commit、parent、push 和最终 status
 
+全部数值取自本次真实 `git` 输出（推送完成后复核）。
+
 | 项目 | 值 |
 | --- | --- |
 | 分支 | `workbench/agent-core` |
-| 提交 1（Task 28 主要实现、测试、文档、脚本） | `cb6c72461a7eab9a5db1f8ed8e0f24bb21b21f53` |
-| 提交 1 信息 | `feat(release): close final desktop integration` |
-| 提交 1 父提交 | `693f0efd1f7462dd3f125e56d4fdd22faa9b329a`（= 基线 HEAD，父链正确） |
+| 基线 HEAD | `693f0efd1f7462dd3f125e56d4fdd22faa9b329a` |
+| 提交 1 | `cb6c72461a7eab9a5db1f8ed8e0f24bb21b21f53` |
+| 提交 1 信息 / 父提交 | `feat(release): close final desktop integration` / `693f0efd1f7462dd3f125e56d4fdd22faa9b329a` |
 | 提交 1 规模 | 22 files changed, 3486 insertions(+), 19 deletions(-) |
-| 提交 2（构建脚本健壮性、vitest hookTimeout、本报告定稿） | 见 `git log -1 --format=%H`（本报告不自我引用其自身提交的 SHA） |
-| 提交对象校验 | `git cat-file -e HEAD^{commit}` 通过 |
-| push | `git push origin workbench/agent-core` 成功（非 force push） |
-| 远程一致性 | `git ls-remote origin refs/heads/workbench/agent-core` 与本地 HEAD 完全一致 |
-| 最终 status | `## workbench/agent-core...origin/workbench/agent-core`，除 `?? .superpowers/` 外无未跟踪或已修改文件 |
+| 提交 2 | `4000bdafe32ee2bac1cfc73e808cc01bd6f5ae2b` |
+| 提交 2 信息 / 父提交 | `fix(release): harden build output hygiene and release gate` / `cb6c72461a7eab9a5db1f8ed8e0f24bb21b21f53` |
+| 提交 2 规模 | 6 files changed, 118 insertions(+), 45 deletions(-) |
+| 提交对象校验 | `git cat-file -e HEAD^{commit}` 通过；`HEAD^`/`HEAD^^` 与上述父链一致 |
+| push | `git push origin workbench/agent-core` → `693f0ef..4000bda workbench/agent-core -> workbench/agent-core`（退出码 0，非 force push） |
+| 远程一致性 | `git ls-remote origin refs/heads/workbench/agent-core` = `4000bdafe32ee2bac1cfc73e808cc01bd6f5ae2b`，与本地 HEAD 完全一致 |
+| 最终 status | `## workbench/agent-core...origin/workbench/agent-core`（无 ahead/behind），除 `?? .superpowers/` 外无未跟踪或已修改文件 |
 
-提交方式遵循约束：只使用显式文件名 `git add`（无 `git add .` / `-A`）、无 amend、无 reset、
-无 checkout、无 rebase、无 force push、未触碰 `.superpowers/`。
+本报告自身在**推送完成后**才定稿（第 12 节写的是已验证的推送结果），因此定稿提交是链上的
+最后一个提交；其 SHA 由 `git log -1 --format=%H` 给出。提交方式遵循约束：只使用显式文件名
+`git add`（无 `git add .` / `-A`）、无 amend、无 reset、无 checkout、无 rebase、无 force push、
+未触碰 `.superpowers/`。
 
 ## 13. 未实现范围与已知问题
 
