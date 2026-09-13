@@ -24,6 +24,22 @@ const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 /// Poll interval for health probes and child-exit checks.
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 
+/// Converts Windows extended-length paths to the ordinary absolute paths
+/// understood by the Node CLI. Tauri may return `\\?\` paths from
+/// `resource_dir()`, but Node does not accept that prefix for its entry file.
+fn normalize_node_script_path(path: String) -> String {
+    #[cfg(windows)]
+    {
+        if let Some(path) = path.strip_prefix("\\\\?\\UNC\\") {
+            return format!("\\\\{path}");
+        }
+        if let Some(path) = path.strip_prefix("\\\\?\\") {
+            return path.to_owned();
+        }
+    }
+    path
+}
+
 /// Observable lifecycle state of the Node sidecar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SidecarState {
@@ -57,7 +73,7 @@ impl SidecarLaunchConfig {
         port: u16,
     ) -> Result<Self, HostError> {
         let executable = executable.into();
-        let script_path = script_path.into();
+        let script_path = normalize_node_script_path(script_path.into());
         let host = host.into();
 
         if executable.trim().is_empty() {
@@ -562,6 +578,37 @@ mod tests {
     fn config_rejects_empty_script_path() {
         let config = SidecarLaunchConfig::new("node", "", "127.0.0.1", 4317);
         assert_eq!(config, Err(HostError::invalid_sidecar_options()));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn config_normalizes_extended_windows_script_path_for_node() {
+        let config = SidecarLaunchConfig::new(
+            "node",
+            r"\\?\C:\agent-routebench\local-agent-host\dist\main.js",
+            "127.0.0.1",
+            4317,
+        )
+        .expect("extended Windows path is a valid script path");
+
+        assert_eq!(
+            config.script_path,
+            r"C:\agent-routebench\local-agent-host\dist\main.js"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn config_normalizes_extended_windows_unc_script_path_for_node() {
+        let config = SidecarLaunchConfig::new(
+            "node",
+            r"\\?\UNC\localhost\agent-routebench\main.js",
+            "127.0.0.1",
+            4317,
+        )
+        .expect("extended UNC path is a valid script path");
+
+        assert_eq!(config.script_path, r"\\localhost\agent-routebench\main.js");
     }
 
     #[test]
