@@ -18,6 +18,8 @@ export const PROVIDER_REGISTRY_ERROR_CODES = Object.freeze({
 
   invalidCredentialRef: "invalid_credential_ref",
   invalidCredentialValue: "invalid_credential_value",
+  invalidCredentialStore: "invalid_credential_store",
+  credentialBackendFailed: "credential_backend_failed",
 
   invalidRouteId: "invalid_route_id",
   duplicateRouteId: "duplicate_route_id",
@@ -65,7 +67,9 @@ const ERROR_MESSAGES = Object.freeze({
 
   invalidCredentialRef:
     "credentialRef must be null or match ^credential:[a-z][a-z0-9._-]{0,63}$.",
-  invalidCredentialValue: "Credential value must be a non-empty string.",
+  invalidCredentialValue: "Credential value is invalid.",
+  invalidCredentialStore: "Credential store options are invalid.",
+  credentialBackendFailed: "Credential operation failed.",
 
   invalidRouteId: "Route id must match ^[a-z][a-z0-9._-]{0,63}$.",
   duplicateRouteId: "A route with this id is already registered.",

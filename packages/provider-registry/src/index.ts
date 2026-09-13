@@ -23,8 +23,19 @@ export {
   providerRegistryError,
 } from "./errors.js";
 
-export type { CredentialRef, CredentialStore } from "./credential-store.js";
-export { InMemoryCredentialStore } from "./credential-store.js";
+export type {
+  CredentialBackend,
+  CredentialRef,
+  CredentialStore,
+  CredentialStoreOptions,
+} from "./credential-store.js";
+export {
+  MAX_CREDENTIAL_BYTES,
+  InMemoryCredentialStore,
+  UnavailableCredentialStore,
+  assertCredentialBackend,
+  createSecureCredentialStore,
+} from "./credential-store.js";
 
 export type { ProviderPreset } from "./presets.js";
 export { getOfficialProviderPresets } from "./presets.js";

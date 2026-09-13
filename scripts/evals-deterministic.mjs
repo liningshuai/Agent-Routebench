@@ -9,7 +9,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 // Deterministic offline eval entry.
 //
 // Stage 1 verifies the expected layout.
-// Stage 2 actually runs the offline scenarios for Tasks 3â€”6 and propagates
+// Stage 2 actually runs the offline scenarios for Tasks 3â€? and propagates
 // their exit codes so this entry can never print "passed" without exercising
 // behaviour.
 //
@@ -314,6 +314,13 @@ const required = [
   "tests/task-25-config-integration.test.ts",
   "docs/config-bootstrap.md",
   "docs/verification/task-25-report.md",
+  "tests/task-26-credential-store.test.ts",
+  "tests/task-26-credential-store-security.test.ts",
+  "tests/task-26-credential-store-validation.test.ts",
+  "tests/task-26-credential-store-concurrency.test.ts",
+  "tests/task-26-credential-store-integration.test.ts",
+  "docs/credential-store.md",
+  "docs/verification/task-26-report.md",
 ];
 
 for (const path of required) {
@@ -547,6 +554,14 @@ runScenario("task 25 secure configuration bootstrap", [
   "tests/task-25-config-lifecycle.test.ts",
   "tests/task-25-config-credentials.test.ts",
   "tests/task-25-config-integration.test.ts",
+]);
+
+runScenario("task 26 secure credential store boundary", [
+  "tests/task-26-credential-store.test.ts",
+  "tests/task-26-credential-store-security.test.ts",
+  "tests/task-26-credential-store-validation.test.ts",
+  "tests/task-26-credential-store-concurrency.test.ts",
+  "tests/task-26-credential-store-integration.test.ts",
 ]);
 console.log(
   [

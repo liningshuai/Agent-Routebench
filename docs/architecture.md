@@ -851,3 +851,26 @@ Local Agent Host (loopback)
 - 不是 OS Keychain 实现
 - 复用既有 `local-persistence`、`agent-backend`、`local-agent-api`
 - 详见 [Config Bootstrap](config-bootstrap.md) 与 [Task 25 报告](verification/task-25-report.md)。
+
+
+### Task 26（已完成：安全凭据存储边界与凭据生命周期）
+
+在 `@agent-workbench/provider-registry` 中新增 `createSecureCredentialStore`：
+
+```text
+CredentialBackend (可注入适配边界)
+        ↓
+SecureCredentialStore (验证 + fail-closed)
+        ↓
+CredentialStore (既有接口)
+```
+
+边界：
+
+- 支持 object literal / null-prototype / class 实例 backend
+- 严格校验 credentialRef（复用 `CREDENTIAL_REF_PATTERN`）
+- 严格校验 secret（非空、非纯空白、≤16 KiB、无控制字符）
+- 后端异常折叠为固定 `credential_backend_failed`
+- 默认 `UnavailableCredentialStore` fail-closed
+- 不是 OS Keychain 实现；未实现真实平台存储
+- 详见 [Credential Store](credential-store.md) 与 [Task 26 报告](verification/task-26-report.md)。
