@@ -1,6 +1,7 @@
 export type {
   LocalAgentApiOptions,
   LocalAgentApiServer,
+  LocalAgentConfigManager,
   LocalAgentHost,
   LocalAgentRunner,
   LocalAgentRunnerRequest,

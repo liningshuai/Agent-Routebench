@@ -23,12 +23,28 @@ fn create_sidecar_supervisor(
         .join("local-agent-host")
         .join("dist")
         .join("main.js");
+    let config_dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|_| Box::new(crate::errors::HostError::invalid_sidecar_options()))?;
+    std::fs::create_dir_all(&config_dir)
+        .map_err(|_| Box::new(crate::errors::HostError::invalid_sidecar_options()))?;
+    let config_path = config_dir.join("config.json");
+    if !config_path.exists() {
+        std::fs::write(
+            &config_path,
+            b"{\n  \"version\": 1,\n  \"providers\": [],\n  \"routes\": []\n}\n",
+        )
+        .map_err(|_| Box::new(crate::errors::HostError::invalid_sidecar_options()))?;
+    }
     let config = SidecarLaunchConfig::new(
         "node",
         script_path.to_string_lossy().into_owned(),
         SIDECAR_LOOPBACK_HOST,
         SIDECAR_DEFAULT_PORT,
     )
+    .and_then(|config| config.with_config_path(config_path.to_string_lossy().into_owned()))
+    .map(|config| config.with_create_config_if_missing(true))
     .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
     let supervisor = NodeHostSupervisor::new(config);
     supervisor
@@ -45,8 +61,11 @@ pub fn run() {
 
             // Wire the production runtime to the Node sidecar proxy.
             let sink = TauriEventSink::new(app.handle().clone());
-            let backend = NodeSidecarBackend::new(SIDECAR_DEFAULT_PORT, Box::new(sink));
-            let runtime = runtime::HostRuntime::with_backend(std::sync::Arc::new(backend));
+            let backend = std::sync::Arc::new(NodeSidecarBackend::new(
+                SIDECAR_DEFAULT_PORT,
+                Box::new(sink),
+            ));
+            let runtime = runtime::HostRuntime::with_backends(backend.clone(), backend);
             app.manage(runtime);
             Ok(())
         })

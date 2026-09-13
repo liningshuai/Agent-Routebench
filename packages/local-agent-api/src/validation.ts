@@ -4,7 +4,13 @@ import {
   validateAgentToolDefinitions,
 } from "@agent-workbench/agent-core";
 import { apiErrorPayload } from "./errors.js";
-import type { LocalAgentApiOptions, LocalAgentRunner, LocalAgentSessionStore, LocalAgentTurnRequest } from "./types.js";
+import type {
+  LocalAgentApiOptions,
+  LocalAgentConfigManager,
+  LocalAgentRunner,
+  LocalAgentSessionStore,
+  LocalAgentTurnRequest,
+} from "./types.js";
 import { DEFAULT_MAX_BODY_BYTES } from "./types.js";
 
 export class ApiValidationError extends Error {
@@ -82,6 +88,22 @@ function assertCallableMethod(value: unknown, name: string): void {
   }
 }
 
+function isConfigManager(value: unknown): value is LocalAgentConfigManager {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return [
+    "getSnapshot",
+    "createProvider",
+    "updateProvider",
+    "deleteProvider",
+    "createRoute",
+    "updateRoute",
+    "deleteRoute",
+  ].every((name) => typeof candidate[name] === "function");
+}
+
 /**
  * Options validation deliberately accepts class instances for `runner` and
  * `store`: only the *method* presence is checked, never the prototype shape.
@@ -94,6 +116,7 @@ export function parseApiOptions(
   runner: LocalAgentRunner;
   store: LocalAgentSessionStore | undefined;
   maxBodyBytes: number;
+  configManager: LocalAgentConfigManager | undefined;
 } {
   // Reject null / undefined / arrays / primitives before any field access.
   // `typeof null === "object"`, so a plain typeof check is not enough.
@@ -142,7 +165,12 @@ export function parseApiOptions(
 
   assertNoSensitiveFields(raw);
 
-  return { host, port, runner: raw.runner, store, maxBodyBytes };
+  const configManager = raw.configManager;
+  if (configManager !== undefined && !isConfigManager(configManager)) {
+    throw new ApiValidationError("invalidRequest");
+  }
+
+  return { host, port, runner: raw.runner, store, maxBodyBytes, configManager };
 }
 
 export function parseTurnRequest(input: unknown): LocalAgentTurnRequest {

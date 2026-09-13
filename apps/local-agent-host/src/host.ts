@@ -62,6 +62,9 @@ export function createLocalAgentHost(options: LocalAgentHostOptions): LocalAgent
             ...(options.maxBodyBytes !== undefined
               ? { maxBodyBytes: options.maxBodyBytes }
               : {}),
+            ...(options.configManager !== undefined
+              ? { configManager: options.configManager }
+              : {}),
           });
           await created.start();
           server = created;
@@ -136,6 +139,9 @@ export function createRunnableLocalAgentHost(
     ...(options.store !== undefined ? { store: options.store } : {}),
     ...(options.maxBodyBytes !== undefined
       ? { maxBodyBytes: options.maxBodyBytes }
+      : {}),
+    ...(options.configManager !== undefined
+      ? { configManager: options.configManager }
       : {}),
   });
 }

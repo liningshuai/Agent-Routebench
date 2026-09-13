@@ -67,6 +67,10 @@ describe("Task 18: Tauri native security — dependency boundary", () => {
       "@agent-workbench/agent-core",
       "@agent-workbench/local-agent-api",
       "@agent-workbench/local-agent-client",
+      // Task 27 uses these workspace packages for type-only configuration
+      // contracts at the renderer boundary.
+      "@agent-workbench/local-persistence",
+      "@agent-workbench/provider-registry",
       "@tauri-apps/api",
     ]);
     for (const name of Object.keys(pkg.dependencies ?? {})) {
@@ -93,8 +97,13 @@ describe("Task 18: Tauri native security — host environment isolation", () => 
     expect(source).not.toContain("Command::new");
   });
 
-  test("Rust host performs no filesystem traversal beyond static assets", () => {
-    const source = rustSourceAll();
+  test("Rust command/runtime modules perform no filesystem traversal", () => {
+    // Task 27's Tauri setup intentionally creates the app-scoped config
+    // directory/file in lib.rs. The command and runtime modules remain free
+    // of filesystem access; config persistence is delegated to the Node host.
+    const source = ["main.rs", "commands.rs", "errors.rs", "validation.rs"]
+      .map(rustFile)
+      .join("\n");
     expect(source).not.toContain("std::fs");
     expect(source).not.toContain("fs::read");
     expect(source).not.toContain("fs::write");

@@ -4,7 +4,17 @@
 
 ## 当前阶段
 
-**Task 23 返工收尾：Native Node Sidecar 生命周期与 Tauri 接入加固**。在 Task 22 的可运行 Local Agent Host 基础上，补齐 Desktop 原生宿主的 sidecar 生命周期边界：
+**Task 27 返工完成：Provider / Route 配置管理与 Desktop 设置闭环**。当前版本已经把配置从 Desktop 设置页贯通到 Tauri Native Proxy、Node Local Agent Host 和持久化 Registry：
+
+- Desktop 设置页通过 `DesktopConfigApiClient` 查看和修改 Provider/Route 的非敏感字段；不接收 API key、token 或 Authorization
+- Local Agent API 提供固定的 `/v1/config`、`/v1/providers`、`/v1/routes` CRUD 端点，由 `ConfigManager` 负责校验、原子持久化和失败回滚
+- Tauri commands 通过 `NodeSidecarBackend` 只访问固定 loopback 路径；sidecar 使用同一个 app-scoped 配置文件启动
+- 缺少配置管理器、非法输入、持久化失败和代理协议错误均 fail-closed，错误消息不回显输入、路径或 secret
+- Task 27 的原始缺口已补齐：HTTP 配置端点、Tauri 配置转发、首启配置文件接入和 Desktop 设置 UI 均已实现并验证
+
+仍未完成：真实 Provider E2E、真实 API Key 验证、OS Keychain、安装包/托盘/自动更新。
+
+**Task 23：Native Node Sidecar 生命周期与 Tauri 接入加固**。在 Task 22 的可运行 Local Agent Host 基础上，补齐 Desktop 原生宿主的 sidecar 生命周期边界：
 
 - `NodeHostSupervisor` 由 Tauri `setup` 创建、启动并持有，在 `RunEvent::Exit` 中幂等停止；启动失败不会伪造 running
 - sidecar 只允许 `127.0.0.1` 与 1–65535 端口，使用无 shell 的 `std::process::Command`；stdout/stderr 使用 `Stdio::null()`，避免满管道阻塞

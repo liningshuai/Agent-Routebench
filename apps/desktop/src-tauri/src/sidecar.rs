@@ -42,6 +42,8 @@ pub struct SidecarLaunchConfig {
     pub script_path: String,
     pub host: String,
     pub port: u16,
+    pub config_path: Option<String>,
+    pub create_config_if_missing: bool,
 }
 
 impl SidecarLaunchConfig {
@@ -79,7 +81,30 @@ impl SidecarLaunchConfig {
             script_path,
             host,
             port,
+            config_path: None,
+            create_config_if_missing: false,
         })
+    }
+
+    /// Adds the absolute configuration path passed to the sidecar.
+    pub fn with_config_path(mut self, path: impl Into<String>) -> Result<Self, HostError> {
+        let path = path.into();
+        if path.trim().is_empty()
+            || path.contains('\0')
+            || path.contains('?')
+            || path.contains('#')
+            || !Path::new(&path).is_absolute()
+        {
+            return Err(HostError::invalid_sidecar_options());
+        }
+        self.config_path = Some(path);
+        Ok(self)
+    }
+
+    /// Requests first-run creation of an empty version-1 config snapshot.
+    pub fn with_create_config_if_missing(mut self, enabled: bool) -> Self {
+        self.create_config_if_missing = enabled;
+        self
     }
 }
 
@@ -112,7 +137,14 @@ impl ProcessLauncher for StdProcessLauncher {
             .arg("--host")
             .arg(&config.host)
             .arg("--port")
-            .arg(config.port.to_string())
+            .arg(config.port.to_string());
+        if let Some(path) = &config.config_path {
+            command.arg("--config").arg(path);
+            if config.create_config_if_missing {
+                command.arg("--create-if-missing");
+            }
+        }
+        command
             .stdin(Stdio::null())
             // The sidecar has no log consumer in the native host. Discarding
             // both streams prevents a child that logs heavily from blocking

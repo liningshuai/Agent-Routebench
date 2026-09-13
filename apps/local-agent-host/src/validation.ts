@@ -1,4 +1,8 @@
-import type { LocalAgentRunner, LocalAgentSessionStore } from "@agent-workbench/local-agent-api";
+import type {
+  LocalAgentConfigManager,
+  LocalAgentRunner,
+  LocalAgentSessionStore,
+} from "@agent-workbench/local-agent-api";
 
 import { LocalAgentHostError } from "./errors.js";
 import type { LocalAgentHostOptions, RunnableLocalAgentHostOptions } from "./types.js";
@@ -32,6 +36,22 @@ export function isLocalAgentSessionStore(value: unknown): value is LocalAgentSes
     typeof candidate.appendEvent === "function" &&
     typeof candidate.setStatus === "function"
   );
+}
+
+export function isLocalAgentConfigManager(value: unknown): value is LocalAgentConfigManager {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return [
+    "getSnapshot",
+    "createProvider",
+    "updateProvider",
+    "deleteProvider",
+    "createRoute",
+    "updateRoute",
+    "deleteRoute",
+  ].every((name) => typeof candidate[name] === "function");
 }
 
 function isPositiveSafeInteger(value: unknown): value is number {
@@ -69,7 +89,7 @@ export function validateHostOptions(options: unknown): asserts options is LocalA
     throw new LocalAgentHostError("invalid_options");
   }
   const candidate = options as Record<string, unknown>;
-  const allowedKeys = new Set(["host", "port", "runner", "store", "maxBodyBytes"]);
+  const allowedKeys = new Set(["host", "port", "runner", "store", "maxBodyBytes", "configManager"]);
   if (Object.keys(candidate).some((key) => !allowedKeys.has(key))) {
     throw new LocalAgentHostError("invalid_options");
   }
@@ -81,6 +101,9 @@ export function validateHostOptions(options: unknown): asserts options is LocalA
     throw new LocalAgentHostError("invalid_options");
   }
   if (candidate.maxBodyBytes !== undefined && !isPositiveSafeInteger(candidate.maxBodyBytes)) {
+    throw new LocalAgentHostError("invalid_options");
+  }
+  if (candidate.configManager !== undefined && !isLocalAgentConfigManager(candidate.configManager)) {
     throw new LocalAgentHostError("invalid_options");
   }
 }
@@ -99,7 +122,7 @@ export function validateRunnableHostOptions(
     throw new LocalAgentHostError("invalid_options");
   }
   const candidate = options as Record<string, unknown>;
-  const allowedKeys = new Set(["host", "port", "backend", "store", "maxBodyBytes"]);
+  const allowedKeys = new Set(["host", "port", "backend", "store", "maxBodyBytes", "configManager"]);
   if (Object.keys(candidate).some((key) => !allowedKeys.has(key))) {
     throw new LocalAgentHostError("invalid_options");
   }
@@ -111,6 +134,9 @@ export function validateRunnableHostOptions(
     throw new LocalAgentHostError("invalid_options");
   }
   if (candidate.maxBodyBytes !== undefined && !isPositiveSafeInteger(candidate.maxBodyBytes)) {
+    throw new LocalAgentHostError("invalid_options");
+  }
+  if (candidate.configManager !== undefined && !isLocalAgentConfigManager(candidate.configManager)) {
     throw new LocalAgentHostError("invalid_options");
   }
 }

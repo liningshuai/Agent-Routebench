@@ -135,7 +135,10 @@ impl HostError {
 
     /// Configuration persistence failed.
     pub const fn config_persistence_failed() -> Self {
-        Self::new(CONFIG_PERSISTENCE_FAILED, "Configuration persistence failed.")
+        Self::new(
+            CONFIG_PERSISTENCE_FAILED,
+            "Configuration persistence failed.",
+        )
     }
 }
 

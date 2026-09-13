@@ -1,49 +1,25 @@
-# Task 27 ÑéÖ¤±¨¸æ
+# Task 27 éªŒè¯æŠ¥å‘Š
 
-## »ùÏß
+## é¦–è½®å®ç°
 
-- HEAD: `5aa64acc9d58e5b9cd9727c82429a1d1b3c365db`
-- HEAD^: `e14e0ac1577f01f75360c3468a68e781011bc211`
-- ·ÖÖ§: `workbench/agent-core`
+Task 27 é¦–è½®æäº¤æ–°å¢äº† `ConfigManager`ã€`DesktopConfigApiClient`ã€Tauri é…ç½® command å¥‘çº¦å’Œ Provider/Route ç®¡ç†æµ‹è¯•ã€‚é¦–è½®åŸºçº¿ä¸º `e14e0ac1577f01f75360c3468a68e781011bc211`ï¼Œå®ç°æäº¤ä¸º `f08d9399d44a417a2553c3b3969c8ad7ec05ee30`ã€‚
 
-## ĞŞ¸ÄÎÄ¼ş
+é¦–è½®å®ç°å·²ç»è¦†ç›–ï¼šProvider/Route æ ¡éªŒã€fallback å…³ç³»ã€åŸå­æŒä¹…åŒ–ã€å¤±è´¥å›æ»šã€å¹¶å‘ä¸²è¡ŒåŒ–ã€å®¢æˆ·ç«¯å“åº”æ ¡éªŒå’Œæ•æ„Ÿå­—æ®µéš”ç¦»ã€‚
 
-| ÎÄ¼ş | ÓÃÍ¾ |
-|------|------|
-| `apps/local-agent-host/src/config-manager.ts` | ConfigManager ÊµÏÖ |
-| `apps/desktop/src/config-client.ts` | DesktopConfigApiClient |
-| `apps/desktop/src/tauri-api-client.ts` | À©Õ¹ TAURI_COMMANDS |
-| `apps/desktop/src-tauri/src/errors.rs` | ÅäÖÃ´íÎóÂë |
-| `apps/desktop/src-tauri/src/commands.rs` | ÅäÖÃÃüÁî£¨fail-closed£© |
-| `apps/desktop/src-tauri/src/lib.rs` | ×¢²áÅäÖÃÃüÁî |
-| `tests/task-27-config-manager.test.ts` | ConfigManager ²âÊÔ£¨21£© |
-| `tests/task-27-config-api.test.ts` | API ²âÊÔ£¨10£© |
-| `tests/task-27-config-security.test.ts` | °²È«²âÊÔ£¨12£© |
-| `tests/task-27-config-concurrency.test.ts` | ²¢·¢²âÊÔ£¨5£© |
-| `tests/task-27-desktop-config.test.ts` | Desktop ¿Í»§¶Ë²âÊÔ£¨8£© |
-| `tests/task-27-tauri-config-boundary.test.ts` | Tauri ±ß½ç²âÊÔ£¨8£© |
-| `docs/config-management.md` | Éè¼ÆÎÄµµ |
-| `docs/verification/task-27-report.md` | ÑéÖ¤±¨¸æ |
+## è¿”å·¥è¡¥é½å†…å®¹
 
-## ²âÊÔÊıÁ¿
+é¦–è½®ç•™ä¸‹çš„é…ç½®é—­ç¯ç¼ºå£å·²åœ¨åç»­è¿”å·¥ä¸­è¡¥é½ï¼š
 
-- Task 27: 64£¨¡İ 60£©
-- È«Á¿: 1967£¨1903 + 64£©
+- Local Agent API å·²æ¥å…¥ `/v1/config`ã€`/v1/providers` å’Œ `/v1/routes` å›ºå®š CRUD ç«¯ç‚¹ã€‚
+- Node Local Agent Host å·²æŠŠåŒä¸€æ–‡ä»¶ store è¿æ¥åˆ° ConfigManagerï¼Œå¹¶æ”¯æŒæ˜¾å¼é¦–å¯ç©ºé…ç½®ã€‚
+- Tauri `ConfigBackend` å·²ç”± `NodeSidecarBackend` é€šè¿‡å›ºå®š loopback è·¯å¾„å®ç°ï¼Œé 2xx å“åº”ä¸è¯»å– bodyã€‚
+- Desktop è®¾ç½®é¡µå·²é€šè¿‡ `DesktopConfigApiClient` æ¥å…¥ Provider/Route è¡¨å•ï¼Œå“åº”å’Œè¾“å…¥å†æ¬¡æ‰§è¡Œç™½åå•æ ¡éªŒã€‚
+- Tauri sidecar å¯åŠ¨æ—¶ä¼ å…¥ app-scoped é…ç½®æ–‡ä»¶è·¯å¾„ï¼›é”™è¯¯å’Œæ•æ„Ÿå­—æ®µä¸ä¼šè·¨ HTTP/IPC/UI è¾¹ç•Œæ³„éœ²ã€‚
 
-## ÑéÖ¤ÃüÁî
+è¯¦ç»†è¿”å·¥è¯æ®è§ [Task 27 rework report](task-27-rework-report.md)ã€‚
 
-```text
-corepack pnpm typecheck                 ¡ú 0
-corepack pnpm test                      ¡ú 0£¨1967 passed£©
-corepack pnpm security:scan             ¡ú 0
-corepack pnpm evals:deterministic       ¡ú 0
-cargo check                             ¡ú 0
-git diff --check                        ¡ú 0
-```
+## ä»ç„¶ä¿æŒçš„è¾¹ç•Œ
 
-## ±ß½çÉùÃ÷
-
-- Ã»ÓĞÕæÊµ Provider µ÷ÓÃ / ÕæÊµÍøÂç / ÕæÊµÆ¾¾İ / OS Keychain
-- Rust ÅäÖÃÃüÁîµ±Ç°·µ»Ø¹Ì¶¨ configuration_unavailable£¨fail-closed£©
-- Ã»ÓĞĞŞ¸Ä `.superpowers/`
-- ²âÊÔÈ«ÂÌ²»´ú±í²»´æÔÚÆäËûÈ±Ïİ
+- `credentialRef` åªè¡¨ç¤ºå¼•ç”¨ï¼Œé…ç½®æ–‡ä»¶ã€é…ç½® API å’Œ UI ä¸ä¿å­˜æˆ–å±•ç¤º secretã€‚
+- æœªè¿æ¥çœŸå® Providerï¼ŒProvider-facing HTTP ä»ç”±è°ƒç”¨æ–¹æ˜¾å¼æ³¨å…¥ fake clientã€‚
+- æœªå®ç° OS Keychainã€å®‰è£…åŒ…ã€æ‰˜ç›˜ã€è‡ªåŠ¨æ›´æ–°å’Œè¿œç¨‹é…ç½®æœåŠ¡ã€‚

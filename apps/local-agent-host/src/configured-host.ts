@@ -1,6 +1,7 @@
 import { isAbsolute } from "node:path";
 import {
   createFileJsonConfigStore,
+  ensureParentDirectory,
   loadProviderRegistry,
 } from "@agent-workbench/local-persistence";
 import { createAgentBackendRunner } from "@agent-workbench/agent-backend";
@@ -8,6 +9,7 @@ import type { HttpClient } from "@agent-workbench/model-gateway";
 import type { CredentialStore } from "@agent-workbench/provider-registry";
 
 import { ConfigBootstrapError } from "./errors.js";
+import { createConfigManager } from "./config-manager.js";
 import { createLocalAgentHost } from "./host.js";
 import type { LocalAgentHost } from "./types.js";
 
@@ -18,6 +20,8 @@ export interface ConfiguredLocalAgentHostOptions {
   readonly configFilePath: string;
   readonly credentials?: CredentialStore;
   readonly httpClient?: HttpClient;
+  /** Creates an empty version-1 snapshot when the path does not exist. */
+  readonly createIfMissing?: boolean;
 }
 
 /**
@@ -112,16 +116,23 @@ export async function createConfiguredLocalAgentHost(
   }
 
   // Load config file and restore registry BEFORE creating any listener.
-  // Load config file and restore registry BEFORE creating any listener.
   // Check existence first so we can distinguish not-found from invalid.
   const { existsSync } = await import("node:fs");
-  if (!existsSync(options.configFilePath)) {
-    throw new ConfigBootstrapError("config_not_found");
-  }
-
   const store = createFileJsonConfigStore({
     filePath: options.configFilePath,
   });
+
+  if (!existsSync(options.configFilePath) && options.createIfMissing === true) {
+    try {
+      await ensureParentDirectory(options.configFilePath);
+      await store.save({ version: 1, providers: [], routes: [] });
+    } catch {
+      throw new ConfigBootstrapError("config_write_failed");
+    }
+  }
+  if (!existsSync(options.configFilePath)) {
+    throw new ConfigBootstrapError("config_not_found");
+  }
 
   let registry;
   try {
@@ -138,11 +149,17 @@ export async function createConfiguredLocalAgentHost(
     ...(options.httpClient !== undefined ? { httpClient: options.httpClient } : {}),
   });
 
+  const configManager = createConfigManager({
+    registry,
+    jsonStore: store,
+  });
+
   // Create and start the loopback host with the assembled runner.
   const localHost = createLocalAgentHost({
     host,
     port: options.port,
     runner,
+    configManager,
   });
   await localHost.start();
   return localHost;

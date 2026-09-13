@@ -61,7 +61,7 @@ describe("Task 23 Tauri sidecar integration", () => {
     const source = readRepoFile("apps/desktop/src/tauri-entry.ts");
 
     expect(source).toContain("createTauriDesktopApiClient({ invoke, listen })");
-    expect(source).toContain("mountDesktopUi(container, client)");
+    expect(source).toMatch(/mountDesktopUi\(container, client(?:, configClient)?\)/);
   });
 
   it("builds a self-contained ESM sidecar resource", () => {

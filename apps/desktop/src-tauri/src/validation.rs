@@ -14,6 +14,7 @@ const MAX_TOOLS: usize = 64;
 const MAX_ROUTE_ID_LEN: usize = 128;
 const MAX_MODEL_LEN: usize = 128;
 const MAX_TOKENS: u64 = 4_000_000;
+const MAX_CONFIG_TEXT_LEN: usize = 512;
 
 /// Fields that must never appear in a turn request, regardless of position.
 const FORBIDDEN_FIELDS: [&str; 11] = [
@@ -35,6 +36,42 @@ const TURN_FIELDS: [&str; 5] = ["messages", "tools", "routeId", "model", "maxTok
 
 const MESSAGE_ROLES: [&str; 4] = ["user", "assistant", "system", "tool"];
 
+const PROVIDER_FIELDS: [&str; 7] = [
+    "id",
+    "name",
+    "protocol",
+    "baseUrl",
+    "credentialRef",
+    "models",
+    "enabled",
+];
+const ROUTE_FIELDS: [&str; 6] = [
+    "id",
+    "name",
+    "providerId",
+    "model",
+    "enabled",
+    "fallbackProviderIds",
+];
+const CONFIG_FORBIDDEN_FIELDS: [&str; 16] = [
+    "apiKey",
+    "api_key",
+    "api-key",
+    "token",
+    "authorization",
+    "headers",
+    "secret",
+    "password",
+    "credential",
+    "endpoint",
+    "access_token",
+    "refresh_token",
+    "client_secret",
+    "bearer",
+    "oauth",
+    "privateKey",
+];
+
 /// Validates an identifier-shaped string: non-empty, bounded, printable ASCII.
 fn validate_identifier(value: &str, kind: fn() -> HostError) -> Result<(), HostError> {
     if value.is_empty() || value.len() > MAX_ID_LEN {
@@ -54,6 +91,11 @@ pub fn validate_session_id(value: &str) -> Result<(), HostError> {
 /// Validates a turn identifier supplied over IPC.
 pub fn validate_turn_id(value: &str) -> Result<(), HostError> {
     validate_identifier(value, HostError::invalid_turn_id)
+}
+
+/// Validates a Provider/Route identifier before it reaches the native proxy.
+pub fn validate_config_id(value: &str) -> Result<(), HostError> {
+    validate_identifier(value, HostError::invalid_config_request)
 }
 
 /// Validates the `messages` array of a turn request.
@@ -193,6 +235,163 @@ pub fn validate_start_turn_payload(session_id: &str, request: &Value) -> Result<
     }
     validate_optional_id(request.get("routeId"), MAX_ROUTE_ID_LEN)?;
     validate_optional_id(request.get("model"), MAX_MODEL_LEN)?;
+    Ok(())
+}
+
+fn validate_config_value(value: &Value, fields: &[&str]) -> Result<(), HostError> {
+    let object = value
+        .as_object()
+        .ok_or_else(HostError::invalid_config_request)?;
+    if object.is_empty() {
+        return Err(HostError::invalid_config_request());
+    }
+    for key in object.keys() {
+        if CONFIG_FORBIDDEN_FIELDS
+            .iter()
+            .any(|forbidden| forbidden.eq_ignore_ascii_case(key))
+        {
+            return Err(HostError::forbidden_field());
+        }
+        if !fields.contains(&key.as_str()) {
+            return Err(HostError::invalid_config_request());
+        }
+    }
+    Ok(())
+}
+
+/// Validates provider configuration before the native proxy is contacted.
+pub fn validate_provider_config(value: &Value) -> Result<(), HostError> {
+    validate_config_value(value, &PROVIDER_FIELDS)?;
+    let object = value.as_object().expect("validated object");
+    let id = object
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or_else(HostError::invalid_config_request)?;
+    let name = object
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or_else(HostError::invalid_config_request)?;
+    let protocol = object
+        .get("protocol")
+        .and_then(Value::as_str)
+        .ok_or_else(HostError::invalid_config_request)?;
+    let base_url = object
+        .get("baseUrl")
+        .and_then(Value::as_str)
+        .ok_or_else(HostError::invalid_config_request)?;
+    validate_config_id(id)?;
+    if name.is_empty() || name.len() > MAX_CONFIG_TEXT_LEN || !name.chars().all(|c| !c.is_control())
+    {
+        return Err(HostError::invalid_config_request());
+    }
+    if protocol != "anthropic_messages" && protocol != "openai_compatible" {
+        return Err(HostError::invalid_config_request());
+    }
+    if base_url.is_empty()
+        || base_url.len() > MAX_CONFIG_TEXT_LEN
+        || base_url
+            .chars()
+            .any(|c| c.is_control() || c.is_whitespace())
+        || (!base_url.starts_with("http://") && !base_url.starts_with("https://"))
+    {
+        return Err(HostError::invalid_config_request());
+    }
+    if object.get("enabled").and_then(Value::as_bool).is_none() || object.get("models").is_none() {
+        return Err(HostError::invalid_config_request());
+    }
+    if object.get("id").and_then(Value::as_str).is_none()
+        || object.get("name").and_then(Value::as_str).is_none()
+        || object.get("protocol").and_then(Value::as_str).is_none()
+        || object.get("baseUrl").and_then(Value::as_str).is_none()
+        || object.get("enabled").and_then(Value::as_bool).is_none()
+    {
+        return Err(HostError::invalid_config_request());
+    }
+    let credential = object.get("credentialRef");
+    if let Some(credential) = credential {
+        match credential {
+            Value::Null => {}
+            Value::String(value)
+                if !value.is_empty()
+                    && value.len() <= MAX_CONFIG_TEXT_LEN
+                    && value.starts_with("credential:")
+                    && value.chars().all(|c| !c.is_control() && !c.is_whitespace()) => {}
+            _ => return Err(HostError::invalid_config_request()),
+        }
+    }
+    let models = object
+        .get("models")
+        .and_then(Value::as_array)
+        .ok_or_else(HostError::invalid_config_request)?;
+    if models.is_empty()
+        || models.iter().any(|model| {
+            model.as_str().is_none_or(|value| {
+                value.is_empty()
+                    || value.len() > MAX_MODEL_LEN
+                    || value.chars().any(|c| c.is_control() || c.is_whitespace())
+            })
+        })
+    {
+        return Err(HostError::invalid_config_request());
+    }
+    Ok(())
+}
+
+/// Validates route configuration before the native proxy is contacted.
+pub fn validate_route_config(value: &Value) -> Result<(), HostError> {
+    validate_config_value(value, &ROUTE_FIELDS)?;
+    let object = value.as_object().expect("validated object");
+    let id = object
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or_else(HostError::invalid_config_request)?;
+    let name = object
+        .get("name")
+        .and_then(Value::as_str)
+        .ok_or_else(HostError::invalid_config_request)?;
+    let provider_id = object
+        .get("providerId")
+        .and_then(Value::as_str)
+        .ok_or_else(HostError::invalid_config_request)?;
+    let model = object
+        .get("model")
+        .and_then(Value::as_str)
+        .ok_or_else(HostError::invalid_config_request)?;
+    validate_config_id(id)?;
+    validate_config_id(provider_id)?;
+    if name.is_empty() || name.len() > MAX_CONFIG_TEXT_LEN || !name.chars().all(|c| !c.is_control())
+    {
+        return Err(HostError::invalid_config_request());
+    }
+    if model.is_empty()
+        || model.len() > MAX_MODEL_LEN
+        || model.chars().any(|c| c.is_control() || c.is_whitespace())
+    {
+        return Err(HostError::invalid_config_request());
+    }
+    for key in ["id", "name", "providerId", "model"] {
+        if object.get(key).and_then(Value::as_str).is_none() {
+            return Err(HostError::invalid_config_request());
+        }
+    }
+    if object.get("enabled").and_then(Value::as_bool).is_none() {
+        return Err(HostError::invalid_config_request());
+    }
+    if let Some(fallbacks) = object.get("fallbackProviderIds") {
+        if !fallbacks.is_array()
+            || fallbacks.as_array().is_some_and(|items| {
+                items.iter().any(|item| {
+                    item.as_str().is_none_or(|value| {
+                        value.is_empty()
+                            || value.len() > MAX_ID_LEN
+                            || value.chars().any(|c| c.is_control() || c.is_whitespace())
+                    })
+                })
+            })
+        {
+            return Err(HostError::invalid_config_request());
+        }
+    }
     Ok(())
 }
 
@@ -371,6 +570,63 @@ mod tests {
             "maxTokens": 1024
         });
         assert_eq!(validate_start_turn_payload("session-1", &request), Ok(()));
+    }
+
+    fn valid_provider_config() -> Value {
+        json!({
+            "id": "provider-one",
+            "name": "Provider One",
+            "protocol": "openai_compatible",
+            "baseUrl": "https://api.example.invalid/v1",
+            "credentialRef": "credential:provider-one",
+            "models": ["model-one"],
+            "enabled": true
+        })
+    }
+
+    fn valid_route_config() -> Value {
+        json!({
+            "id": "route-one",
+            "name": "Route One",
+            "providerId": "provider-one",
+            "model": "model-one",
+            "enabled": true,
+            "fallbackProviderIds": ["provider-two"]
+        })
+    }
+
+    #[test]
+    fn config_validation_accepts_non_sensitive_provider_and_route_shapes() {
+        assert_eq!(validate_provider_config(&valid_provider_config()), Ok(()));
+        assert_eq!(validate_route_config(&valid_route_config()), Ok(()));
+        assert_eq!(validate_config_id("provider-one"), Ok(()));
+    }
+
+    #[test]
+    fn config_validation_rejects_secrets_and_invalid_values_before_proxy() {
+        let mut provider = valid_provider_config();
+        provider
+            .as_object_mut()
+            .expect("object")
+            .insert("apiKey".into(), json!("secret"));
+        assert_eq!(
+            validate_provider_config(&provider),
+            Err(HostError::forbidden_field())
+        );
+
+        let mut route = valid_route_config();
+        route
+            .as_object_mut()
+            .expect("object")
+            .insert("fallbackProviderIds".into(), json!([""]));
+        assert_eq!(
+            validate_route_config(&route),
+            Err(HostError::invalid_config_request())
+        );
+        assert_eq!(
+            validate_config_id(""),
+            Err(HostError::invalid_config_request())
+        );
     }
 
     #[test]

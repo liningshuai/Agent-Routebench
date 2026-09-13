@@ -13,6 +13,8 @@
     "@agent-workbench/agent-core": "workspace:*",
     "@agent-workbench/local-agent-api": "workspace:*",
     "@agent-workbench/local-agent-client": "workspace:*",
+    "@agent-workbench/local-persistence": "workspace:*",
+    "@agent-workbench/provider-registry": "workspace:*",
     "@tauri-apps/api": "^2.9.5"
   },
   "devDependencies": {

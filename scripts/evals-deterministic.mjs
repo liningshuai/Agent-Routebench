@@ -9,7 +9,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 // Deterministic offline eval entry.
 //
 // Stage 1 verifies the expected layout.
-// Stage 2 actually runs the offline scenarios for Tasks 3â€? and propagates
+// Stage 2 actually runs the offline scenarios for Tasks 3ï¿½? and propagates
 // their exit codes so this entry can never print "passed" without exercising
 // behaviour.
 //
@@ -331,6 +331,9 @@ const required = [
   "tests/task-27-tauri-config-boundary.test.ts",
   "docs/config-management.md",
   "docs/verification/task-27-report.md",
+  "tests/task-27-rework-integration.test.ts",
+  "tests/task-27-rework-desktop.test.ts",
+  "docs/verification/task-27-rework-report.md",
 ];
 
 for (const path of required) {
@@ -581,6 +584,8 @@ runScenario("task 27 provider and route management", [
   "tests/task-27-config-concurrency.test.ts",
   "tests/task-27-desktop-config.test.ts",
   "tests/task-27-tauri-config-boundary.test.ts",
+  "tests/task-27-rework-integration.test.ts",
+  "tests/task-27-rework-desktop.test.ts",
 ]);
 console.log(
   [
@@ -696,5 +701,11 @@ console.log(
     "assembles the existing Agent Backend, and accepts credentials only through explicit",
     "injection. Startup performs no credential read or provider request; the default source",
     "fails closed. Configuration errors are fixed and do not expose paths or secrets.",
+    "Task 27 completes the configuration bridge: the Local Agent API exposes fixed",
+    "Provider/Route CRUD endpoints backed by the serialized ConfigManager, the Tauri",
+    "native proxy forwards only validated loopback requests, and the Desktop settings",
+    "panel renders and edits non-secret provider/route fields without exposing secrets.",
+    "The rework also verifies first-run config creation, fixed 400 mapping for registry",
+    "validation failures, malformed path handling and the Tauri sidecar config wiring.",
   ].join(" "),
 );

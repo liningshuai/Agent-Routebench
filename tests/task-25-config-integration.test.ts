@@ -144,6 +144,12 @@ describe("task 25 config integration", () => {
     const health = await fetch(`${address}/health`);
     expect(health.status).toBe(200);
 
+    // The configured bootstrap must expose the same loaded registry through
+    // the configuration bridge before any turn is started.
+    const config = await fetch(`${address}/v1/config`);
+    expect(config.status).toBe(200);
+    expect(await config.json()).toEqual(VALID_CONFIG);
+
     // Create session
     const created = await fetch(`${address}/v1/sessions`, {
       method: "POST",

@@ -15,4 +15,4 @@ export type { JsonConfigStore } from "./json-store.js";
 export { InMemoryJsonConfigStore } from "./json-store.js";
 
 export type { FileJsonConfigStoreOptions } from "./file-store.js";
-export { createFileJsonConfigStore } from "./file-store.js";
+export { createFileJsonConfigStore, ensureParentDirectory } from "./file-store.js";

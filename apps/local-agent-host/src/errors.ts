@@ -9,6 +9,7 @@ export type LocalAgentHostErrorCode =
   | "runner_not_ready"
   | "invalid_config_path"
   | "config_not_found"
+  | "config_write_failed"
   | "config_invalid"
   | "invalid_credentials";
 
@@ -26,6 +27,7 @@ export const LOCAL_AGENT_HOST_ERROR_MESSAGES = {
   runner_not_ready: "Local agent runner is not ready.",
   invalid_config_path: "Configuration file path is invalid.",
   config_not_found: "Configuration file was not found.",
+  config_write_failed: "Configuration file could not be created.",
   config_invalid: "Configuration file is invalid.",
   invalid_credentials: "Credential store is invalid.",
 } as const satisfies Record<LocalAgentHostErrorCode, string>;

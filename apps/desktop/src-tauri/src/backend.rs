@@ -171,6 +171,31 @@ impl CancelTurnResponse {
     }
 }
 
+/// Closed response shapes for the configuration IPC commands. The nested
+/// values are accepted only after the Node proxy applies the provider/route
+/// allow-list validation.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ConfigSnapshotResponse {
+    pub version: u32,
+    pub providers: Vec<serde_json::Value>,
+    pub routes: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ProviderConfigResponse {
+    pub provider: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RouteConfigResponse {
+    pub route: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ConfigDeleteResponse {
+    pub ok: bool,
+}
+
 /// A pluggable Agent backend behind the fixed IPC commands.
 ///
 /// Implementations are wired in through [`crate::runtime::HostRuntime`] and
@@ -187,6 +212,64 @@ pub trait HostBackend: Send + Sync {
 
     fn cancel_turn(&self, session_id: &str, turn_id: &str)
         -> Result<CancelTurnResponse, HostError>;
+}
+
+/// Configuration operations are a separate seam so the existing model
+/// backend contract remains focused on turns. Production uses the same
+/// loopback sidecar object for both seams; tests can inject either one.
+pub trait ConfigBackend: Send + Sync {
+    fn get_config(&self) -> Result<ConfigSnapshotResponse, HostError>;
+    fn create_provider(
+        &self,
+        provider: &serde_json::Value,
+    ) -> Result<ProviderConfigResponse, HostError>;
+    fn update_provider(
+        &self,
+        provider: &serde_json::Value,
+    ) -> Result<ProviderConfigResponse, HostError>;
+    fn delete_provider(&self, provider_id: &str) -> Result<ConfigDeleteResponse, HostError>;
+    fn create_route(&self, route: &serde_json::Value) -> Result<RouteConfigResponse, HostError>;
+    fn update_route(&self, route: &serde_json::Value) -> Result<RouteConfigResponse, HostError>;
+    fn delete_route(&self, route_id: &str) -> Result<ConfigDeleteResponse, HostError>;
+}
+
+/// Production-safe default before a Node sidecar is wired.
+pub struct NotReadyConfigBackend;
+
+impl ConfigBackend for NotReadyConfigBackend {
+    fn get_config(&self) -> Result<ConfigSnapshotResponse, HostError> {
+        Err(HostError::configuration_unavailable())
+    }
+
+    fn create_provider(
+        &self,
+        _provider: &serde_json::Value,
+    ) -> Result<ProviderConfigResponse, HostError> {
+        Err(HostError::configuration_unavailable())
+    }
+
+    fn update_provider(
+        &self,
+        _provider: &serde_json::Value,
+    ) -> Result<ProviderConfigResponse, HostError> {
+        Err(HostError::configuration_unavailable())
+    }
+
+    fn delete_provider(&self, _provider_id: &str) -> Result<ConfigDeleteResponse, HostError> {
+        Err(HostError::configuration_unavailable())
+    }
+
+    fn create_route(&self, _route: &serde_json::Value) -> Result<RouteConfigResponse, HostError> {
+        Err(HostError::configuration_unavailable())
+    }
+
+    fn update_route(&self, _route: &serde_json::Value) -> Result<RouteConfigResponse, HostError> {
+        Err(HostError::configuration_unavailable())
+    }
+
+    fn delete_route(&self, _route_id: &str) -> Result<ConfigDeleteResponse, HostError> {
+        Err(HostError::configuration_unavailable())
+    }
 }
 
 /// Production default backend.

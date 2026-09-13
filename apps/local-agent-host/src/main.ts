@@ -1,5 +1,6 @@
 import { createLocalAgentHost } from "./host.js";
-import { LocalAgentHostError } from "./errors.js";
+import { createConfiguredLocalAgentHost } from "./configured-host.js";
+import { ConfigBootstrapError, LocalAgentHostError } from "./errors.js";
 import type { LocalAgentHostMainOptions } from "./types.js";
 import { validateHostOptions } from "./validation.js";
 import { resolve } from "node:path";
@@ -8,6 +9,8 @@ import { fileURLToPath } from "node:url";
 interface ParsedArguments {
   readonly host?: "127.0.0.1" | "localhost";
   readonly port: number;
+  readonly configFilePath?: string;
+  readonly createIfMissing: boolean;
 }
 
 /**
@@ -18,14 +21,40 @@ interface ParsedArguments {
 function parseArguments(argv: readonly string[]): ParsedArguments {
   let host: string | undefined;
   let rawPort: string | undefined;
+  let configFilePath: string | undefined;
+  let createIfMissing = false;
+  let sawHost = false;
+  let sawPort = false;
+  let sawConfig = false;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--host") {
+      if (sawHost) throw new LocalAgentHostError("invalid_options");
+      if (index + 1 >= argv.length || argv[index + 1]?.startsWith("--")) {
+        throw new LocalAgentHostError("invalid_options");
+      }
+      sawHost = true;
       host = argv[index + 1];
       index += 1;
     } else if (argument === "--port") {
+      if (sawPort) throw new LocalAgentHostError("invalid_options");
+      if (index + 1 >= argv.length || argv[index + 1]?.startsWith("--")) {
+        throw new LocalAgentHostError("invalid_options");
+      }
+      sawPort = true;
       rawPort = argv[index + 1];
       index += 1;
+    } else if (argument === "--config") {
+      if (sawConfig) throw new LocalAgentHostError("invalid_options");
+      if (index + 1 >= argv.length || argv[index + 1]?.startsWith("--")) {
+        throw new LocalAgentHostError("invalid_options");
+      }
+      sawConfig = true;
+      configFilePath = argv[index + 1];
+      index += 1;
+    } else if (argument === "--create-if-missing") {
+      if (createIfMissing) throw new LocalAgentHostError("invalid_options");
+      createIfMissing = true;
     } else {
       throw new LocalAgentHostError("invalid_options");
     }
@@ -33,12 +62,21 @@ function parseArguments(argv: readonly string[]): ParsedArguments {
   if (rawPort === undefined || host === "") {
     throw new LocalAgentHostError("invalid_options");
   }
+  if (createIfMissing && configFilePath === undefined) {
+    throw new LocalAgentHostError("invalid_options");
+  }
   const port = Number(rawPort);
   const parsed: ParsedArguments = {
     port,
+    createIfMissing,
     ...(host === undefined ? {} : { host: host as "127.0.0.1" | "localhost" }),
+    ...(configFilePath === undefined ? {} : { configFilePath }),
   };
-  validateHostOptions({ ...parsed, runner: undefined });
+  validateHostOptions({
+    ...(parsed.host === undefined ? {} : { host: parsed.host }),
+    port: parsed.port,
+    runner: undefined,
+  });
   return parsed;
 }
 
@@ -56,11 +94,22 @@ export async function runLocalAgentHostMain(
   try {
     const argv = options.argv ?? process.argv.slice(2);
     const parsed = parseArguments(argv);
-    const host = createLocalAgentHost({
-      ...(parsed.host === undefined ? {} : { host: parsed.host }),
-      port: parsed.port,
-    });
-    await host.start();
+    const host = parsed.configFilePath === undefined
+      ? createLocalAgentHost({
+          ...(parsed.host === undefined ? {} : { host: parsed.host }),
+          port: parsed.port,
+        })
+      : await createConfiguredLocalAgentHost({
+          ...(parsed.host === undefined ? {} : { host: parsed.host }),
+          port: parsed.port,
+          configFilePath: parsed.configFilePath,
+          createIfMissing: parsed.createIfMissing,
+        });
+    // Configured bootstrap starts its host after the file has been validated;
+    // the plain host still needs to be started here.
+    if (parsed.configFilePath === undefined) {
+      await host.start();
+    }
 
     let resolveShutdown: () => void = () => undefined;
     const shutdown = new Promise<void>((resolve) => {
@@ -83,7 +132,7 @@ export async function runLocalAgentHostMain(
     return 0;
   } catch (error: unknown) {
     log(
-      error instanceof LocalAgentHostError
+      error instanceof LocalAgentHostError || error instanceof ConfigBootstrapError
         ? error.message
         : "Local agent host failed to start.",
     );

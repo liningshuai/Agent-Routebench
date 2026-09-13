@@ -8,11 +8,12 @@
 
 use std::sync::Arc;
 
-use crate::backend::{HostBackend, NotReadyBackend};
+use crate::backend::{ConfigBackend, HostBackend, NotReadyBackend, NotReadyConfigBackend};
 
 /// Owns the currently wired [`HostBackend`].
 pub struct HostRuntime {
     backend: Arc<dyn HostBackend>,
+    config_backend: Arc<dyn ConfigBackend>,
 }
 
 impl HostRuntime {
@@ -20,6 +21,7 @@ impl HostRuntime {
     pub fn not_ready() -> Self {
         Self {
             backend: Arc::new(NotReadyBackend),
+            config_backend: Arc::new(NotReadyConfigBackend),
         }
     }
 
@@ -27,12 +29,31 @@ impl HostRuntime {
     /// Unused in the MVP production build by design.
     #[allow(dead_code)]
     pub fn with_backend(backend: Arc<dyn HostBackend>) -> Self {
-        Self { backend }
+        Self {
+            backend,
+            config_backend: Arc::new(NotReadyConfigBackend),
+        }
+    }
+
+    /// Wires the model and configuration seams to one explicitly owned
+    /// sidecar proxy. No global mutable state is introduced.
+    pub fn with_backends(
+        backend: Arc<dyn HostBackend>,
+        config_backend: Arc<dyn ConfigBackend>,
+    ) -> Self {
+        Self {
+            backend,
+            config_backend,
+        }
     }
 
     /// The wired backend, used by the fixed IPC commands after validation.
     pub fn backend(&self) -> &dyn HostBackend {
         self.backend.as_ref()
+    }
+
+    pub fn config_backend(&self) -> &dyn ConfigBackend {
+        self.config_backend.as_ref()
     }
 }
 

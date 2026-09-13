@@ -12,11 +12,206 @@ import {
 } from "./validation.js";
 import type {
   LocalAgentApiOptions,
+  LocalAgentConfigManager,
   LocalAgentApiServer,
   LocalAgentSessionStore,
 } from "./types.js";
 
 const SAFE_ABORT_MESSAGE = "Turn aborted.";
+
+const CONFIG_FORBIDDEN_FIELDS = new Set([
+  "apikey",
+  "api_key",
+  "api-key",
+  "token",
+  "authorization",
+  "headers",
+  "secret",
+  "password",
+  "credential",
+  "endpoint",
+  "access_token",
+  "refresh_token",
+  "client_secret",
+  "bearer",
+  "oauth",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assertNoConfigSecrets(value: unknown, depth = 0): void {
+  if (depth > 32) {
+    throw new ApiValidationError("invalidConfigRequest");
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      assertNoConfigSecrets(item, depth + 1);
+    }
+    return;
+  }
+  if (!isRecord(value)) {
+    return;
+  }
+  for (const [key, nested] of Object.entries(value)) {
+    if (CONFIG_FORBIDDEN_FIELDS.has(key.toLowerCase())) {
+      throw new ApiValidationError("invalidConfigRequest");
+    }
+    assertNoConfigSecrets(nested, depth + 1);
+  }
+}
+
+const PROVIDER_RESPONSE_FIELDS = new Set([
+  "id",
+  "name",
+  "protocol",
+  "baseUrl",
+  "credentialRef",
+  "models",
+  "enabled",
+]);
+
+const ROUTE_RESPONSE_FIELDS = new Set([
+  "id",
+  "name",
+  "providerId",
+  "model",
+  "enabled",
+  "fallbackProviderIds",
+]);
+
+function assertSafeProvider(value: unknown): Record<string, unknown> {
+  if (!isRecord(value) || Object.keys(value).some((key) => !PROVIDER_RESPONSE_FIELDS.has(key))) {
+    throw new Error("invalid config response");
+  }
+  if (
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    (value.protocol !== "anthropic_messages" && value.protocol !== "openai_compatible") ||
+    typeof value.baseUrl !== "string" ||
+    (value.credentialRef !== null && typeof value.credentialRef !== "string") ||
+    !Array.isArray(value.models) ||
+    !value.models.every((model) => typeof model === "string") ||
+    typeof value.enabled !== "boolean"
+  ) {
+    throw new Error("invalid config response");
+  }
+  return structuredClone(value);
+}
+
+function assertSafeRoute(value: unknown): Record<string, unknown> {
+  if (!isRecord(value) || Object.keys(value).some((key) => !ROUTE_RESPONSE_FIELDS.has(key))) {
+    throw new Error("invalid config response");
+  }
+  if (
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.providerId !== "string" ||
+    typeof value.model !== "string" ||
+    typeof value.enabled !== "boolean" ||
+    (value.fallbackProviderIds !== undefined &&
+      (!Array.isArray(value.fallbackProviderIds) ||
+        !value.fallbackProviderIds.every((id) => typeof id === "string")))
+  ) {
+    throw new Error("invalid config response");
+  }
+  return structuredClone(value);
+}
+
+function safeConfigSnapshot(value: unknown): {
+  version: 1;
+  providers: Record<string, unknown>[];
+  routes: Record<string, unknown>[];
+} {
+  if (!isRecord(value) || value.version !== 1) {
+    throw new Error("invalid config response");
+  }
+  const keys = Object.keys(value);
+  if (!keys.every((key) => key === "version" || key === "providers" || key === "routes")) {
+    throw new Error("invalid config response");
+  }
+  if (!Array.isArray(value.providers) || !Array.isArray(value.routes)) {
+    throw new Error("invalid config response");
+  }
+  return {
+    version: 1,
+    providers: value.providers.map(assertSafeProvider),
+    routes: value.routes.map(assertSafeRoute),
+  };
+}
+
+function safeConfigEntity(
+  value: unknown,
+  key: "provider" | "route",
+): Record<string, unknown> {
+  return {
+    [key]: key === "provider" ? assertSafeProvider(value) : assertSafeRoute(value),
+  };
+}
+
+function configErrorKey(error: unknown): keyof typeof import("./errors.js").API_ERRORS {
+  if (error instanceof ApiValidationError) {
+    return "invalidConfigRequest";
+  }
+  const code = isRecord(error) && typeof error.code === "string" ? error.code : "";
+  if (code === "invalid_config_request") {
+    return "invalidConfigRequest";
+  }
+  if (code === "config_persistence_failed") {
+    return "configPersistenceFailed";
+  }
+  // ConfigManager deliberately preserves stable registry error codes for
+  // callers that need to distinguish a failed operation.  They are all
+  // client/configuration failures at this HTTP boundary, however, and must
+  // never become an indistinguishable 500 response.
+  if (
+    code === "invalid_config_request" ||
+    code === "invalid_provider_id" ||
+    code === "invalid_provider_name" ||
+    code === "invalid_provider_protocol" ||
+    code === "invalid_provider_url" ||
+    code === "invalid_provider_models" ||
+    code === "invalid_provider_enabled" ||
+    code === "invalid_credential_ref" ||
+    code === "forbidden_provider_field" ||
+    code === "duplicate_provider_id" ||
+    code === "provider_not_found" ||
+    code === "provider_has_routes" ||
+    code === "provider_disabled" ||
+    code === "invalid_route_id" ||
+    code === "invalid_route_name" ||
+    code === "invalid_route_model" ||
+    code === "invalid_route_enabled" ||
+    code === "invalid_fallback_provider_ids" ||
+    code === "duplicate_fallback_provider_id" ||
+    code === "too_many_fallback_providers" ||
+    code === "forbidden_route_field" ||
+    code === "duplicate_route_id" ||
+    code === "route_not_found" ||
+    code === "fallback_provider_not_found" ||
+    code === "fallback_model_not_available" ||
+    code === "model_not_available"
+  ) {
+    return "invalidConfigRequest";
+  }
+  return "serverError";
+}
+
+function decodePathSegment(value: string): string {
+  try {
+    const decoded = decodeURIComponent(value);
+    if (decoded.length === 0 || decoded.includes("\0")) {
+      return value;
+    }
+    return decoded;
+  } catch {
+    // Keep malformed path data opaque. The route handler will pass it through
+    // the normal fixed validation/error mapping instead of allowing a native
+    // URIError to escape as an HTTP 500.
+    return value;
+  }
+}
 
 function sendJson(
   res: ServerResponse,
@@ -204,6 +399,10 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
       return;
     }
 
+    if (await this.#handleConfig(req, res, path, method)) {
+      return;
+    }
+
     if (path === "/v1/sessions") {
       if (method !== "POST") {
         sendError(res, 405, "methodNotAllowed");
@@ -218,7 +417,7 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
 
     const sessionMatch = /^\/v1\/sessions\/([^/]+)$/.exec(path);
     if (sessionMatch !== null) {
-      const sessionId = decodeURIComponent(sessionMatch[1] ?? "");
+      const sessionId = decodePathSegment(sessionMatch[1] ?? "");
       if (method !== "GET") {
         sendError(res, 405, "methodNotAllowed");
         return;
@@ -234,7 +433,7 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
 
     const eventsMatch = /^\/v1\/sessions\/([^/]+)\/events$/.exec(path);
     if (eventsMatch !== null) {
-      const sessionId = decodeURIComponent(eventsMatch[1] ?? "");
+      const sessionId = decodePathSegment(eventsMatch[1] ?? "");
       if (method !== "GET") {
         sendError(res, 405, "methodNotAllowed");
         return;
@@ -252,7 +451,7 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
 
     const cancelMatch = /^\/v1\/sessions\/([^/]+)\/cancel$/.exec(path);
     if (cancelMatch !== null) {
-      const sessionId = decodeURIComponent(cancelMatch[1] ?? "");
+      const sessionId = decodePathSegment(cancelMatch[1] ?? "");
       if (method !== "POST") {
         sendError(res, 405, "methodNotAllowed");
         return;
@@ -277,7 +476,7 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
 
     const turnMatch = /^\/v1\/sessions\/([^/]+)\/turns$/.exec(path);
     if (turnMatch !== null) {
-      const sessionId = decodeURIComponent(turnMatch[1] ?? "");
+      const sessionId = decodePathSegment(turnMatch[1] ?? "");
       if (method !== "POST") {
         sendError(res, 405, "methodNotAllowed");
         return;
@@ -292,12 +491,12 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
   async #readJson(
     req: IncomingMessage,
     res: ServerResponse,
-    onBody: (body: unknown) => void,
+    onBody: (body: unknown) => void | Promise<void>,
   ): Promise<void> {
     try {
       const raw = await readBody(req, this.#options.maxBodyBytes);
       const body = parseJsonBody(raw);
-      onBody(body);
+      await onBody(body);
     } catch (error) {
       if (error instanceof ApiValidationError) {
         sendJson(res, error.payload.error.code === "payload_too_large" ? 413 : 400, error.payload);
@@ -305,6 +504,140 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
       }
       sendError(res, 400, "invalidJson");
     }
+  }
+
+  async #handleConfig(
+    req: IncomingMessage,
+    res: ServerResponse,
+    path: string,
+    method: string,
+  ): Promise<boolean> {
+    const isConfigPath =
+      path === "/v1/config" ||
+      path === "/v1/providers" ||
+      /^\/v1\/providers\/[^/]+$/.test(path) ||
+      path === "/v1/routes" ||
+      /^\/v1\/routes\/[^/]+$/.test(path);
+    if (!isConfigPath) {
+      return false;
+    }
+
+    const manager: LocalAgentConfigManager | undefined = this.#options.configManager;
+    if (manager === undefined) {
+      sendError(res, 503, "configurationUnavailable");
+      return true;
+    }
+
+    const sendConfigFailure = (error: unknown): void => {
+      const key = configErrorKey(error);
+      const status = key === "invalidConfigRequest" ? 400 : 500;
+      sendError(res, status, key);
+    };
+
+    if (path === "/v1/config") {
+      if (method !== "GET") {
+        sendError(res, 405, "methodNotAllowed");
+        return true;
+      }
+      try {
+        sendJson(res, 200, safeConfigSnapshot(manager.getSnapshot()));
+      } catch (error) {
+        sendConfigFailure(error);
+      }
+      return true;
+    }
+
+    if (path === "/v1/providers" && method === "POST") {
+      await this.#readJson(req, res, async (body) => {
+        try {
+          assertNoConfigSecrets(body);
+          if (!isRecord(body)) {
+            throw new ApiValidationError("invalidConfigRequest");
+          }
+          sendJson(res, 201, safeConfigEntity(await manager.createProvider(body), "provider"));
+        } catch (error) {
+          sendConfigFailure(error);
+        }
+      });
+      return true;
+    }
+    if (path === "/v1/routes" && method === "POST") {
+      await this.#readJson(req, res, async (body) => {
+        try {
+          assertNoConfigSecrets(body);
+          if (!isRecord(body)) {
+            throw new ApiValidationError("invalidConfigRequest");
+          }
+          sendJson(res, 201, safeConfigEntity(await manager.createRoute(body), "route"));
+        } catch (error) {
+          sendConfigFailure(error);
+        }
+      });
+      return true;
+    }
+
+    const providerMatch = /^\/v1\/providers\/([^/]+)$/.exec(path);
+    if (providerMatch !== null) {
+      const id = decodePathSegment(providerMatch[1] ?? "");
+      if (method === "DELETE") {
+        try {
+          await manager.deleteProvider(id);
+          sendJson(res, 200, { ok: true });
+        } catch (error) {
+          sendConfigFailure(error);
+        }
+        return true;
+      }
+      if (method === "PUT") {
+        await this.#readJson(req, res, async (body) => {
+          try {
+            assertNoConfigSecrets(body);
+            if (!isRecord(body) || body.id !== id) {
+              throw new ApiValidationError("invalidConfigRequest");
+            }
+            sendJson(res, 200, safeConfigEntity(await manager.updateProvider(body), "provider"));
+          } catch (error) {
+            sendConfigFailure(error);
+          }
+        });
+        return true;
+      }
+      sendError(res, 405, "methodNotAllowed");
+      return true;
+    }
+
+    const routeMatch = /^\/v1\/routes\/([^/]+)$/.exec(path);
+    if (routeMatch !== null) {
+      const id = decodePathSegment(routeMatch[1] ?? "");
+      if (method === "DELETE") {
+        try {
+          await manager.deleteRoute(id);
+          sendJson(res, 200, { ok: true });
+        } catch (error) {
+          sendConfigFailure(error);
+        }
+        return true;
+      }
+      if (method === "PUT") {
+        await this.#readJson(req, res, async (body) => {
+          try {
+            assertNoConfigSecrets(body);
+            if (!isRecord(body) || body.id !== id) {
+              throw new ApiValidationError("invalidConfigRequest");
+            }
+            sendJson(res, 200, safeConfigEntity(await manager.updateRoute(body), "route"));
+          } catch (error) {
+            sendConfigFailure(error);
+          }
+        });
+        return true;
+      }
+      sendError(res, 405, "methodNotAllowed");
+      return true;
+    }
+
+    sendError(res, 405, "methodNotAllowed");
+    return true;
   }
 
   async #handleTurn(

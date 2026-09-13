@@ -11,7 +11,10 @@ use serde::Serialize;
 use serde_json::Value;
 use tauri::State;
 
-use crate::backend::{CancelTurnResponse, CreateSessionResponse, StartTurnResponse};
+use crate::backend::{
+    CancelTurnResponse, ConfigDeleteResponse, ConfigSnapshotResponse, CreateSessionResponse,
+    ProviderConfigResponse, RouteConfigResponse, StartTurnResponse,
+};
 use crate::errors::HostError;
 use crate::runtime::HostRuntime;
 use crate::validation;
@@ -117,30 +120,10 @@ fn cancel_turn_checked(
 // These commands forward to the Node Host's config API through the sidecar
 // proxy. They use fixed paths and never accept arbitrary URLs or headers.
 
-#[derive(Debug, Clone, Serialize)]
-pub struct GetConfigResponse {
-    pub version: u32,
-    pub providers: Vec<serde_json::Value>,
-    pub routes: Vec<serde_json::Value>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ConfigEntityResponse {
-    pub entity: serde_json::Value,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct DeleteConfigResponse {
-    pub ok: bool,
-}
-
 /// Returns the current non-sensitive Provider/Route configuration snapshot.
 #[tauri::command]
-pub fn agent_get_config(
-    runtime: State<HostRuntime>,
-) -> Result<GetConfigResponse, HostError> {
-    let _ = runtime;
-    Err(HostError::configuration_unavailable())
+pub fn agent_get_config(runtime: State<HostRuntime>) -> Result<ConfigSnapshotResponse, HostError> {
+    runtime.config_backend().get_config()
 }
 
 /// Creates a provider in the configuration.
@@ -148,10 +131,9 @@ pub fn agent_get_config(
 pub fn agent_create_provider(
     runtime: State<HostRuntime>,
     provider: Value,
-) -> Result<ConfigEntityResponse, HostError> {
-    let _ = runtime;
-    let _ = provider;
-    Err(HostError::configuration_unavailable())
+) -> Result<ProviderConfigResponse, HostError> {
+    validation::validate_provider_config(&provider)?;
+    runtime.config_backend().create_provider(&provider)
 }
 
 /// Updates a provider in the configuration.
@@ -159,10 +141,9 @@ pub fn agent_create_provider(
 pub fn agent_update_provider(
     runtime: State<HostRuntime>,
     provider: Value,
-) -> Result<ConfigEntityResponse, HostError> {
-    let _ = runtime;
-    let _ = provider;
-    Err(HostError::configuration_unavailable())
+) -> Result<ProviderConfigResponse, HostError> {
+    validation::validate_provider_config(&provider)?;
+    runtime.config_backend().update_provider(&provider)
 }
 
 /// Deletes a provider from the configuration.
@@ -170,10 +151,9 @@ pub fn agent_update_provider(
 pub fn agent_delete_provider(
     runtime: State<HostRuntime>,
     provider_id: String,
-) -> Result<DeleteConfigResponse, HostError> {
-    let _ = runtime;
-    let _ = provider_id;
-    Err(HostError::configuration_unavailable())
+) -> Result<ConfigDeleteResponse, HostError> {
+    validation::validate_config_id(&provider_id)?;
+    runtime.config_backend().delete_provider(&provider_id)
 }
 
 /// Creates a route in the configuration.
@@ -181,10 +161,9 @@ pub fn agent_delete_provider(
 pub fn agent_create_route(
     runtime: State<HostRuntime>,
     route: Value,
-) -> Result<ConfigEntityResponse, HostError> {
-    let _ = runtime;
-    let _ = route;
-    Err(HostError::configuration_unavailable())
+) -> Result<RouteConfigResponse, HostError> {
+    validation::validate_route_config(&route)?;
+    runtime.config_backend().create_route(&route)
 }
 
 /// Updates a route in the configuration.
@@ -192,10 +171,9 @@ pub fn agent_create_route(
 pub fn agent_update_route(
     runtime: State<HostRuntime>,
     route: Value,
-) -> Result<ConfigEntityResponse, HostError> {
-    let _ = runtime;
-    let _ = route;
-    Err(HostError::configuration_unavailable())
+) -> Result<RouteConfigResponse, HostError> {
+    validation::validate_route_config(&route)?;
+    runtime.config_backend().update_route(&route)
 }
 
 /// Deletes a route from the configuration.
@@ -203,10 +181,9 @@ pub fn agent_update_route(
 pub fn agent_delete_route(
     runtime: State<HostRuntime>,
     route_id: String,
-) -> Result<DeleteConfigResponse, HostError> {
-    let _ = runtime;
-    let _ = route_id;
-    Err(HostError::configuration_unavailable())
+) -> Result<ConfigDeleteResponse, HostError> {
+    validation::validate_config_id(&route_id)?;
+    runtime.config_backend().delete_route(&route_id)
 }
 
 #[cfg(test)]

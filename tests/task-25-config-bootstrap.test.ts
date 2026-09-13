@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -46,6 +46,27 @@ async function writeConfig(dir: string, name: string, content: unknown): Promise
 }
 
 describe("task 25 config bootstrap", () => {
+  it("creates an empty config when explicitly requested", async () => {
+    const configPath = join(tempDir, "nested", "first-run.json");
+    const host = await createConfiguredLocalAgentHost({
+      host: "127.0.0.1",
+      port: 15199,
+      configFilePath: configPath,
+      createIfMissing: true,
+    });
+    try {
+      await expect(access(configPath)).resolves.toBeUndefined();
+      expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
+        version: 1,
+        providers: [],
+        routes: [],
+      });
+      expect(host.state()).toBe("running");
+    } finally {
+      await host.close();
+    }
+  });
+
   it("rejects a missing config file without starting a listener", async () => {
     const missingPath = join(tempDir, "does-not-exist.json");
     await expect(

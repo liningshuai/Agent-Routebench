@@ -63,76 +63,166 @@ function assertConfigClientOptions(
   }
 }
 
+const PROVIDER_FIELDS = new Set([
+  "id",
+  "name",
+  "protocol",
+  "baseUrl",
+  "credentialRef",
+  "models",
+  "enabled",
+]);
+const ROUTE_FIELDS = new Set([
+  "id",
+  "name",
+  "providerId",
+  "model",
+  "enabled",
+  "fallbackProviderIds",
+]);
+const FORBIDDEN_FIELDS = new Set([
+  "apikey",
+  "api_key",
+  "api-key",
+  "token",
+  "authorization",
+  "headers",
+  "secret",
+  "password",
+  "credential",
+  "endpoint",
+  "access_token",
+  "refresh_token",
+  "client_secret",
+  "bearer",
+  "oauth",
+]);
+
+function assertNoSensitiveFields(value: unknown, depth = 0): void {
+  if (depth > 32) {
+    throw new Error("invalid");
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) assertNoSensitiveFields(item, depth + 1);
+    return;
+  }
+  if (!isRecord(value)) return;
+  for (const [key, nested] of Object.entries(value)) {
+    if (FORBIDDEN_FIELDS.has(key.toLowerCase())) {
+      throw new Error("invalid");
+    }
+    assertNoSensitiveFields(nested, depth + 1);
+  }
+}
+
+function assertAllowedKeys(value: Record<string, unknown>, allowed: Set<string>): void {
+  if (Object.keys(value).some((key) => !allowed.has(key))) {
+    throw new Error("invalid");
+  }
+}
+
+function assertNonEmptyString(value: unknown): asserts value is string {
+  if (typeof value !== "string" || value.length === 0 || value.trim() !== value) {
+    throw new Error("invalid");
+  }
+}
+
+function validateProviderInput(value: unknown): ProviderDefinition {
+  assertNoSensitiveFields(value);
+  return parseProvider(value);
+}
+
+function validateRouteInput(value: unknown): RouteDefinition {
+  assertNoSensitiveFields(value);
+  return parseRoute(value);
+}
+
 function parseProvider(value: unknown): ProviderDefinition {
   if (!isRecord(value)) {
     throw createDesktopError("CONNECTION_FAILED");
   }
-  const allowed = new Set([
-    "id",
-    "name",
-    "protocol",
-    "baseUrl",
-    "credentialRef",
-    "models",
-    "enabled",
-  ]);
-  for (const key of Object.keys(value)) {
-    if (!allowed.has(key)) {
-      throw createDesktopError("CONNECTION_FAILED");
-    }
-  }
+  assertAllowedKeys(value, PROVIDER_FIELDS);
   if (
     typeof value.id !== "string" ||
     typeof value.name !== "string" ||
     (value.protocol !== "anthropic_messages" &&
       value.protocol !== "openai_compatible") ||
     typeof value.baseUrl !== "string" ||
-    (value.credentialRef !== null && typeof value.credentialRef !== "string") ||
+    (value.credentialRef !== undefined &&
+      value.credentialRef !== null &&
+      typeof value.credentialRef !== "string") ||
     !Array.isArray(value.models) ||
+    value.models.length === 0 ||
+    !value.models.every((model) => typeof model === "string" && model.length > 0) ||
     typeof value.enabled !== "boolean"
   ) {
     throw createDesktopError("CONNECTION_FAILED");
   }
-  return value as unknown as ProviderDefinition;
+  assertNonEmptyString(value.id);
+  assertNonEmptyString(value.name);
+  assertNonEmptyString(value.baseUrl);
+  if (value.credentialRef !== undefined && value.credentialRef !== null) {
+    assertNonEmptyString(value.credentialRef);
+  }
+  return {
+    id: value.id,
+    name: value.name,
+    protocol: value.protocol,
+    baseUrl: value.baseUrl,
+    credentialRef: value.credentialRef === undefined ? null : value.credentialRef,
+    models: [...value.models],
+    enabled: value.enabled,
+  } as ProviderDefinition;
 }
 
 function parseRoute(value: unknown): RouteDefinition {
   if (!isRecord(value)) {
     throw createDesktopError("CONNECTION_FAILED");
   }
-  const allowed = new Set([
-    "id",
-    "name",
-    "providerId",
-    "model",
-    "enabled",
-    "fallbackProviderIds",
-  ]);
-  for (const key of Object.keys(value)) {
-    if (!allowed.has(key)) {
-      throw createDesktopError("CONNECTION_FAILED");
-    }
-  }
+  assertAllowedKeys(value, ROUTE_FIELDS);
   if (
     typeof value.id !== "string" ||
     typeof value.name !== "string" ||
     typeof value.providerId !== "string" ||
     typeof value.model !== "string" ||
-    typeof value.enabled !== "boolean"
+    typeof value.enabled !== "boolean" ||
+    (value.fallbackProviderIds !== undefined &&
+      (!Array.isArray(value.fallbackProviderIds) ||
+        !value.fallbackProviderIds.every(
+          (id) => typeof id === "string" && id.length > 0,
+        )))
   ) {
     throw createDesktopError("CONNECTION_FAILED");
   }
-  return value as unknown as RouteDefinition;
+  assertNonEmptyString(value.id);
+  assertNonEmptyString(value.name);
+  assertNonEmptyString(value.providerId);
+  assertNonEmptyString(value.model);
+  return {
+    id: value.id,
+    name: value.name,
+    providerId: value.providerId,
+    model: value.model,
+    enabled: value.enabled,
+    ...(value.fallbackProviderIds === undefined
+      ? {}
+      : { fallbackProviderIds: [...value.fallbackProviderIds] }),
+  } as RouteDefinition;
 }
 
 function parseSnapshot(value: unknown): PersistedConfigV1 {
   if (!isRecord(value) || value.version !== 1) {
     throw createDesktopError("CONNECTION_FAILED");
   }
+  assertAllowedKeys(value, new Set(["version", "providers", "routes"]));
   if (!Array.isArray(value.providers) || !Array.isArray(value.routes)) {
     throw createDesktopError("CONNECTION_FAILED");
   }
-  return value as unknown as PersistedConfigV1;
+  return {
+    version: 1,
+    providers: value.providers.map(parseProvider),
+    routes: value.routes.map(parseRoute),
+  } as PersistedConfigV1;
 }
 
 class DesktopConfigClient implements DesktopConfigApiClient {
@@ -162,9 +252,10 @@ class DesktopConfigClient implements DesktopConfigApiClient {
       if (signal?.aborted) {
         throw new Error("aborted");
       }
+      const provider = validateProviderInput(input);
       const response = await this.#invoke(
         CONFIG_COMMANDS.createProvider,
-        { provider: input },
+        { provider },
       );
       if (!isRecord(response) || !("provider" in response)) {
         throw new Error("invalid");
@@ -183,9 +274,10 @@ class DesktopConfigClient implements DesktopConfigApiClient {
       if (signal?.aborted) {
         throw new Error("aborted");
       }
+      const provider = validateProviderInput(input);
       const response = await this.#invoke(
         CONFIG_COMMANDS.updateProvider,
-        { provider: input },
+        { provider },
       );
       if (!isRecord(response) || !("provider" in response)) {
         throw new Error("invalid");
@@ -204,6 +296,7 @@ class DesktopConfigClient implements DesktopConfigApiClient {
       if (signal?.aborted) {
         throw new Error("aborted");
       }
+      assertNonEmptyString(providerId);
       await this.#invoke(CONFIG_COMMANDS.deleteProvider, { providerId });
     } catch {
       throw createDesktopError("CANCEL_FAILED");
@@ -218,9 +311,10 @@ class DesktopConfigClient implements DesktopConfigApiClient {
       if (signal?.aborted) {
         throw new Error("aborted");
       }
+      const route = validateRouteInput(input);
       const response = await this.#invoke(
         CONFIG_COMMANDS.createRoute,
-        { route: input },
+        { route },
       );
       if (!isRecord(response) || !("route" in response)) {
         throw new Error("invalid");
@@ -239,9 +333,10 @@ class DesktopConfigClient implements DesktopConfigApiClient {
       if (signal?.aborted) {
         throw new Error("aborted");
       }
+      const route = validateRouteInput(input);
       const response = await this.#invoke(
         CONFIG_COMMANDS.updateRoute,
-        { route: input },
+        { route },
       );
       if (!isRecord(response) || !("route" in response)) {
         throw new Error("invalid");
@@ -260,6 +355,7 @@ class DesktopConfigClient implements DesktopConfigApiClient {
       if (signal?.aborted) {
         throw new Error("aborted");
       }
+      assertNonEmptyString(routeId);
       await this.#invoke(CONFIG_COMMANDS.deleteRoute, { routeId });
     } catch {
       throw createDesktopError("CANCEL_FAILED");

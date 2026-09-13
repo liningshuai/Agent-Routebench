@@ -18,7 +18,13 @@ export {
   bootstrapDesktopUi,
   bootstrapDesktopUiFromDocument,
   DESKTOP_API_CLIENT_GLOBAL,
+  DESKTOP_CONFIG_CLIENT_GLOBAL,
 } from "./browser-entry.js";
+export {
+  createDesktopConfigClient,
+  CONFIG_COMMANDS,
+  type DesktopConfigApiClient,
+} from "./config-client.js";
 export {
   createLoopbackDesktopApiClient,
   type LoopbackDesktopApiClientOptions,

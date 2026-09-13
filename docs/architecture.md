@@ -26,7 +26,7 @@ Anthropic Messages   OpenAI-compatible
 
 ## 已完成层级
 
-截至 Task 23 返工收尾，以下层级已实现并通过测试：
+截至 Task 27 返工完成，以下层级已实现并通过测试：
 
 - **Desktop Interactive UI**（Task 15）：`mountDesktopUi()`、响应式渲染、会话切换、取消按钮、草稿保留、卸载清理与浏览器入口
 - **Desktop**（Task 14: `@agent-workbench/desktop`）：Tauri-ready 基础层，状态管理、API 边界、安全 ViewModel
@@ -41,10 +41,14 @@ Anthropic Messages   OpenAI-compatible
 - **Shared Local Agent API Client**（Task 16: `@agent-workbench/local-agent-client`）：CLI 与 Desktop 共用的 loopback HTTP 客户端、NDJSON 解析与取消边界
 - **Tauri IPC Bridge**（Task 17: `TauriDesktopApiClient`）：将宿主注入的 `invoke` / `listen` 映射为 `DesktopApiClient`，校验 IPC 边界、过滤并发 turn 事件、处理取消与监听器释放
 - **Native Node Sidecar Supervisor**（Task 23：`NodeHostSupervisor`）：Tauri setup 启动并持有 loopback Node Host，退出时回收；启动探活验证真实 `/health` 响应，停止错误不被吞掉，sidecar 资源为自包含 ESM 闭包
+- **Native loopback proxy**（Task 24）：Tauri Rust 通过固定 loopback HTTP 请求 Node Host，转发 typed session/turn/cancel 响应和受校验的 NDJSON 事件流
+- **Configured Host**（Task 25）：Node Host 在监听前加载并校验非敏感配置快照，恢复 ProviderRegistry，并通过显式 CredentialStore 注入组装 Backend
+- **Secure Credential Store boundary**（Task 26）：CredentialStore 的 credentialRef/secret 校验和 fail-closed backend 边界
+- **Provider / Route Configuration Management**（Task 27）：ConfigManager、Local Agent API 配置端点、Tauri 配置 commands/native proxy 与 Desktop 设置页形成完整闭环
 
 未完成层级：
 
-- **Tauri Backend Proxy**：Rust command 目前仍保持 typed `HostRuntime` 契约与 `host_not_ready` 默认边界；Node sidecar 生命周期已接入，但 Tauri command 到 Node Backend 的真实代理、配置加载、菜单/托盘与生产安装包仍未完成。
+- **生产化能力**：真实 Provider E2E、OS Keychain、安装包、托盘、自动更新和更完整的配置/运行状态 UX 仍未完成。Tauri command 到 Node Host 的 turn 与配置代理已经接通，但默认测试与开发环境仍使用显式注入的 fake Provider HTTP client。
 
 ## 契约层与依赖方向
 
@@ -900,5 +904,7 @@ ConfigManager → ProviderRegistry + local-persistence
 - 每次变更原子持久化；失败回滚内存状态
 - 并发变更串行化；删除被引用 Provider 被拒绝
 - 不暴露 secret；不连接真实 Provider；不读取真实凭据
-- Rust 配置命令当前返回固定 `configuration_unavailable`（fail-closed）
+- Rust 配置命令通过 `NodeSidecarBackend` 转发固定的 Local Agent API 配置端点；sidecar 未就绪时仍返回固定 `configuration_unavailable`
+- 首次启动使用 app-scoped 配置文件；配置文件路径通过无 shell 的 sidecar 参数传入，Node Host 在监听前完成校验和加载
+- Desktop 设置页通过 `DesktopConfigApiClient` 读写 Provider/Route 非敏感字段，并在客户端再次校验响应
 - 详见 [Config Management](config-management.md) 与 [Task 27 报告](verification/task-27-report.md)。

@@ -1,6 +1,7 @@
 import type {
   LocalAgentHost as LoopbackHost,
   LocalAgentRunner,
+  LocalAgentConfigManager,
   LocalAgentSessionStore,
 } from "@agent-workbench/local-agent-api";
 import type { AgentBackendOptions } from "@agent-workbench/agent-backend";
@@ -26,6 +27,7 @@ export interface LocalAgentHostOptions {
   readonly runner?: LocalAgentRunner;
   readonly store?: LocalAgentSessionStore;
   readonly maxBodyBytes?: number;
+  readonly configManager?: LocalAgentConfigManager;
 }
 
 /** A started-or-startable loopback Local Agent API host instance. */
@@ -50,6 +52,7 @@ export interface RunnableLocalAgentHostOptions {
   readonly backend: AgentBackendOptions;
   readonly store?: LocalAgentSessionStore;
   readonly maxBodyBytes?: number;
+  readonly configManager?: LocalAgentConfigManager;
 }
 
 /** Options for the Node entry point; all injectable for testing. */

@@ -84,6 +84,12 @@ importers:
       '@agent-workbench/local-agent-client':
         specifier: workspace:*
         version: link:../../packages/local-agent-client
+      '@agent-workbench/local-persistence':
+        specifier: workspace:*
+        version: link:../../packages/local-persistence
+      '@agent-workbench/provider-registry':
+        specifier: workspace:*
+        version: link:../../packages/provider-registry
       '@tauri-apps/api':
         specifier: ^2.9.5
         version: 2.11.1

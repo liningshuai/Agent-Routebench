@@ -1,8 +1,7 @@
-import {
-  InMemoryProviderRegistry,
-  type ProviderDefinition,
-  type ProviderRegistry,
-  type RouteDefinition,
+import type {
+  ProviderDefinition,
+  ProviderRegistry,
+  RouteDefinition,
 } from "@agent-workbench/provider-registry";
 import {
   createConfigSnapshot,
@@ -19,6 +18,25 @@ export class ConfigManagerError extends Error {
     this.name = "ConfigManagerError";
     this.code = code;
   }
+}
+
+const INVALID_CONFIG_MESSAGE = "Configuration request is invalid.";
+
+function invalidConfigError(error: unknown): ConfigManagerError {
+  if (error instanceof ConfigManagerError) {
+    return error;
+  }
+  // Registry errors are useful to internal callers through their stable code,
+  // but their text is not part of the API boundary and must never be copied
+  // into an error that can reach the HTTP or Desktop layer.
+  const code =
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
+      ? (error as { code: string }).code
+      : "invalid_config_request";
+  return new ConfigManagerError(code, INVALID_CONFIG_MESSAGE);
 }
 
 export interface ConfigManagerOptions {
@@ -67,12 +85,7 @@ class ConfigManagerImpl implements ConfigManager {
       } catch (error) {
         // Restore from snapshot on failure.
         this.#restore(snapshot);
-        throw error instanceof ConfigManagerError
-          ? error
-          : new ConfigManagerError(
-              "invalid_config_request",
-              error instanceof Error ? error.message : "Config operation failed.",
-            );
+        throw invalidConfigError(error);
       }
       try {
         await saveProviderRegistry(this.#jsonStore, this.#registry);
@@ -96,10 +109,7 @@ class ConfigManagerImpl implements ConfigManager {
         this.#registry.updateProvider(input as ProviderDefinition);
       } catch (error) {
         this.#restore(snapshot);
-        throw new ConfigManagerError(
-          "invalid_config_request",
-          error instanceof Error ? error.message : "Config operation failed.",
-        );
+        throw invalidConfigError(error);
       }
       try {
         await saveProviderRegistry(this.#jsonStore, this.#registry);
@@ -123,10 +133,7 @@ class ConfigManagerImpl implements ConfigManager {
         this.#registry.removeProvider(providerId);
       } catch (error) {
         this.#restore(snapshot);
-        throw new ConfigManagerError(
-          "invalid_config_request",
-          error instanceof Error ? error.message : "Config operation failed.",
-        );
+        throw invalidConfigError(error);
       }
       try {
         await saveProviderRegistry(this.#jsonStore, this.#registry);
@@ -147,10 +154,7 @@ class ConfigManagerImpl implements ConfigManager {
         this.#registry.registerRoute(input as RouteDefinition);
       } catch (error) {
         this.#restore(snapshot);
-        throw new ConfigManagerError(
-          "invalid_config_request",
-          error instanceof Error ? error.message : "Config operation failed.",
-        );
+        throw invalidConfigError(error);
       }
       try {
         await saveProviderRegistry(this.#jsonStore, this.#registry);
@@ -174,10 +178,7 @@ class ConfigManagerImpl implements ConfigManager {
         this.#registry.updateRoute(input as RouteDefinition);
       } catch (error) {
         this.#restore(snapshot);
-        throw new ConfigManagerError(
-          "invalid_config_request",
-          error instanceof Error ? error.message : "Config operation failed.",
-        );
+        throw invalidConfigError(error);
       }
       try {
         await saveProviderRegistry(this.#jsonStore, this.#registry);
@@ -201,10 +202,7 @@ class ConfigManagerImpl implements ConfigManager {
         this.#registry.removeRoute(routeId);
       } catch (error) {
         this.#restore(snapshot);
-        throw new ConfigManagerError(
-          "invalid_config_request",
-          error instanceof Error ? error.message : "Config operation failed.",
-        );
+        throw invalidConfigError(error);
       }
       try {
         await saveProviderRegistry(this.#jsonStore, this.#registry);
@@ -224,18 +222,17 @@ class ConfigManagerImpl implements ConfigManager {
     // We replace the internal maps by re-registering everything.
     // Since ProviderRegistry is an interface, we clear by removing all
     // and re-adding. For InMemoryProviderRegistry this works.
-    const reg = this.#registry as InMemoryProviderRegistry;
-    for (const route of reg.listRoutes()) {
-      reg.removeRoute(route.id);
+    for (const route of this.#registry.listRoutes()) {
+      this.#registry.removeRoute(route.id);
     }
-    for (const provider of reg.listProviders()) {
-      reg.removeProvider(provider.id);
+    for (const provider of this.#registry.listProviders()) {
+      this.#registry.removeProvider(provider.id);
     }
     for (const provider of restored.listProviders()) {
-      reg.registerProvider(provider);
+      this.#registry.registerProvider(provider);
     }
     for (const route of restored.listRoutes()) {
-      reg.registerRoute(route);
+      this.#registry.registerRoute(route);
     }
   }
 

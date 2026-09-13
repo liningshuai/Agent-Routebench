@@ -41,6 +41,18 @@ export const API_ERRORS = Object.freeze({
     code: "server_error",
     message: "Internal server error.",
   },
+  configurationUnavailable: {
+    code: "configuration_unavailable",
+    message: "Configuration is unavailable.",
+  },
+  invalidConfigRequest: {
+    code: "invalid_config_request",
+    message: "Configuration request is invalid.",
+  },
+  configPersistenceFailed: {
+    code: "config_persistence_failed",
+    message: "Configuration persistence failed.",
+  },
 } as const);
 
 export function apiErrorPayload(

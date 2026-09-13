@@ -13,8 +13,9 @@ use std::time::Duration;
 use serde_json::Value;
 
 use crate::backend::{
-    CancelTurnResponse, CreateSessionResponse, HostBackend, HostSession, HostSessionStatus,
-    StartTurnResponse,
+    CancelTurnResponse, ConfigBackend, ConfigDeleteResponse, ConfigSnapshotResponse,
+    CreateSessionResponse, HostBackend, HostSession, HostSessionStatus, ProviderConfigResponse,
+    RouteConfigResponse, StartTurnResponse,
 };
 use crate::errors::HostError;
 
@@ -299,6 +300,16 @@ fn http_post(
     body: &str,
     close_connection: bool,
 ) -> Result<HttpResponse, HostError> {
+    http_request("POST", port, path, body, close_connection)
+}
+
+fn http_request(
+    method: &str,
+    port: u16,
+    path: &str,
+    body: &str,
+    close_connection: bool,
+) -> Result<HttpResponse, HostError> {
     let addr = format!("{SIDECAR_HOST}:{port}");
     let socket = addr
         .parse()
@@ -318,7 +329,7 @@ fn http_post(
         "keep-alive"
     };
     let request = format!(
-        "POST {path} HTTP/1.1\r\nHost: {SIDECAR_HOST}:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: {connection}\r\n\r\n{body}",
+        "{method} {path} HTTP/1.1\r\nHost: {SIDECAR_HOST}:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: {connection}\r\n\r\n{body}",
         body.len()
     );
     stream
@@ -481,6 +492,170 @@ fn parse_session_response(body: &[u8]) -> Result<CreateSessionResponse, HostErro
 
     let session = HostSession::new(id, status, created_at, updated_at, active_turn_id)?;
     Ok(CreateSessionResponse::new(session))
+}
+
+fn config_keys_are_allowed<'a>(
+    value: &'a Value,
+    allowed: &[&str],
+) -> Result<&'a serde_json::Map<String, Value>, HostError> {
+    let object = value
+        .as_object()
+        .ok_or(HostError::sidecar_proxy_protocol_error())?;
+    if object
+        .keys()
+        .any(|key| !allowed.iter().any(|candidate| *candidate == key))
+    {
+        return Err(HostError::sidecar_proxy_protocol_error());
+    }
+    Ok(object)
+}
+
+fn validate_config_provider(value: &Value) -> Result<Value, HostError> {
+    let object = config_keys_are_allowed(
+        value,
+        &[
+            "id",
+            "name",
+            "protocol",
+            "baseUrl",
+            "credentialRef",
+            "models",
+            "enabled",
+        ],
+    )?;
+    for key in ["id", "name", "protocol", "baseUrl"] {
+        if object.get(key).and_then(Value::as_str).is_none() {
+            return Err(HostError::sidecar_proxy_protocol_error());
+        }
+    }
+    if object.get("protocol").and_then(Value::as_str) != Some("anthropic_messages")
+        && object.get("protocol").and_then(Value::as_str) != Some("openai_compatible")
+    {
+        return Err(HostError::sidecar_proxy_protocol_error());
+    }
+    if !matches!(
+        object.get("credentialRef"),
+        Some(Value::Null) | Some(Value::String(_))
+    ) {
+        return Err(HostError::sidecar_proxy_protocol_error());
+    }
+    let models = object
+        .get("models")
+        .and_then(Value::as_array)
+        .ok_or(HostError::sidecar_proxy_protocol_error())?;
+    if models.is_empty() || models.iter().any(|model| model.as_str().is_none()) {
+        return Err(HostError::sidecar_proxy_protocol_error());
+    }
+    if object.get("enabled").and_then(Value::as_bool).is_none() {
+        return Err(HostError::sidecar_proxy_protocol_error());
+    }
+    Ok(value.clone())
+}
+
+fn validate_config_route(value: &Value) -> Result<Value, HostError> {
+    let object = config_keys_are_allowed(
+        value,
+        &[
+            "id",
+            "name",
+            "providerId",
+            "model",
+            "enabled",
+            "fallbackProviderIds",
+        ],
+    )?;
+    for key in ["id", "name", "providerId", "model"] {
+        if object.get(key).and_then(Value::as_str).is_none() {
+            return Err(HostError::sidecar_proxy_protocol_error());
+        }
+    }
+    if object.get("enabled").and_then(Value::as_bool).is_none() {
+        return Err(HostError::sidecar_proxy_protocol_error());
+    }
+    if let Some(fallbacks) = object.get("fallbackProviderIds") {
+        if !fallbacks.is_array()
+            || fallbacks
+                .as_array()
+                .is_some_and(|items| items.iter().any(|item| item.as_str().is_none()))
+        {
+            return Err(HostError::sidecar_proxy_protocol_error());
+        }
+    }
+    Ok(value.clone())
+}
+
+fn parse_config_snapshot(body: &[u8]) -> Result<ConfigSnapshotResponse, HostError> {
+    let text = std::str::from_utf8(body).map_err(|_| HostError::sidecar_proxy_protocol_error())?;
+    let value: Value =
+        serde_json::from_str(text).map_err(|_| HostError::sidecar_proxy_protocol_error())?;
+    let object = config_keys_are_allowed(&value, &["version", "providers", "routes"])?;
+    if object.len() != 3 || object.get("version").and_then(Value::as_u64) != Some(1) {
+        return Err(HostError::sidecar_proxy_protocol_error());
+    }
+    let providers = object
+        .get("providers")
+        .and_then(Value::as_array)
+        .ok_or(HostError::sidecar_proxy_protocol_error())?
+        .iter()
+        .map(validate_config_provider)
+        .collect::<Result<Vec<_>, _>>()?;
+    let routes = object
+        .get("routes")
+        .and_then(Value::as_array)
+        .ok_or(HostError::sidecar_proxy_protocol_error())?
+        .iter()
+        .map(validate_config_route)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(ConfigSnapshotResponse {
+        version: 1,
+        providers,
+        routes,
+    })
+}
+
+fn parse_provider_config_response(body: &[u8]) -> Result<ProviderConfigResponse, HostError> {
+    let text = std::str::from_utf8(body).map_err(|_| HostError::sidecar_proxy_protocol_error())?;
+    let value: Value =
+        serde_json::from_str(text).map_err(|_| HostError::sidecar_proxy_protocol_error())?;
+    let object = config_keys_are_allowed(&value, &["provider"])?;
+    if object.len() != 1 {
+        return Err(HostError::sidecar_proxy_protocol_error());
+    }
+    Ok(ProviderConfigResponse {
+        provider: validate_config_provider(
+            object
+                .get("provider")
+                .ok_or(HostError::sidecar_proxy_protocol_error())?,
+        )?,
+    })
+}
+
+fn parse_route_config_response(body: &[u8]) -> Result<RouteConfigResponse, HostError> {
+    let text = std::str::from_utf8(body).map_err(|_| HostError::sidecar_proxy_protocol_error())?;
+    let value: Value =
+        serde_json::from_str(text).map_err(|_| HostError::sidecar_proxy_protocol_error())?;
+    let object = config_keys_are_allowed(&value, &["route"])?;
+    if object.len() != 1 {
+        return Err(HostError::sidecar_proxy_protocol_error());
+    }
+    Ok(RouteConfigResponse {
+        route: validate_config_route(
+            object
+                .get("route")
+                .ok_or(HostError::sidecar_proxy_protocol_error())?,
+        )?,
+    })
+}
+
+fn parse_config_delete_response(body: &[u8]) -> Result<ConfigDeleteResponse, HostError> {
+    let text = std::str::from_utf8(body).map_err(|_| HostError::sidecar_proxy_protocol_error())?;
+    let value: Value =
+        serde_json::from_str(text).map_err(|_| HostError::sidecar_proxy_protocol_error())?;
+    let object = config_keys_are_allowed(&value, &["ok"])?;
+    if object.len() != 1 || object.get("ok").and_then(Value::as_bool) != Some(true) {
+        return Err(HostError::sidecar_proxy_protocol_error());
+    }
+    Ok(ConfigDeleteResponse { ok: true })
 }
 
 /// Validates an AgentEvent from the sidecar NDJSON stream.
@@ -833,6 +1008,91 @@ impl HostBackend for NodeSidecarBackend {
 
         let _ = turn_id; // turn_id is validated by the caller
         Ok(CancelTurnResponse::ok())
+    }
+}
+
+impl ConfigBackend for NodeSidecarBackend {
+    fn get_config(&self) -> Result<ConfigSnapshotResponse, HostError> {
+        let mut response = http_request("GET", self.port, "/v1/config", "", true)?;
+        if response.status < 200 || response.status >= 300 {
+            return Err(HostError::sidecar_proxy_http_error());
+        }
+        let body = response.body.read_to_end(MAX_JSON_BODY_BYTES)?;
+        parse_config_snapshot(&body)
+    }
+
+    fn create_provider(&self, provider: &Value) -> Result<ProviderConfigResponse, HostError> {
+        let body =
+            serde_json::to_string(provider).map_err(|_| HostError::invalid_config_request())?;
+        let mut response = http_post(self.port, "/v1/providers", &body, true)?;
+        if response.status < 200 || response.status >= 300 {
+            return Err(HostError::sidecar_proxy_http_error());
+        }
+        let body = response.body.read_to_end(MAX_JSON_BODY_BYTES)?;
+        parse_provider_config_response(&body)
+    }
+
+    fn update_provider(&self, provider: &Value) -> Result<ProviderConfigResponse, HostError> {
+        let id = provider
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty())
+            .ok_or(HostError::invalid_config_request())?;
+        let body =
+            serde_json::to_string(provider).map_err(|_| HostError::invalid_config_request())?;
+        let path = format!("/v1/providers/{}", encode_path_segment(id));
+        let mut response = http_request("PUT", self.port, &path, &body, true)?;
+        if response.status < 200 || response.status >= 300 {
+            return Err(HostError::sidecar_proxy_http_error());
+        }
+        let body = response.body.read_to_end(MAX_JSON_BODY_BYTES)?;
+        parse_provider_config_response(&body)
+    }
+
+    fn delete_provider(&self, provider_id: &str) -> Result<ConfigDeleteResponse, HostError> {
+        let path = format!("/v1/providers/{}", encode_path_segment(provider_id));
+        let mut response = http_request("DELETE", self.port, &path, "", true)?;
+        if response.status < 200 || response.status >= 300 {
+            return Err(HostError::sidecar_proxy_http_error());
+        }
+        let body = response.body.read_to_end(MAX_JSON_BODY_BYTES)?;
+        parse_config_delete_response(&body)
+    }
+
+    fn create_route(&self, route: &Value) -> Result<RouteConfigResponse, HostError> {
+        let body = serde_json::to_string(route).map_err(|_| HostError::invalid_config_request())?;
+        let mut response = http_post(self.port, "/v1/routes", &body, true)?;
+        if response.status < 200 || response.status >= 300 {
+            return Err(HostError::sidecar_proxy_http_error());
+        }
+        let body = response.body.read_to_end(MAX_JSON_BODY_BYTES)?;
+        parse_route_config_response(&body)
+    }
+
+    fn update_route(&self, route: &Value) -> Result<RouteConfigResponse, HostError> {
+        let id = route
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty())
+            .ok_or(HostError::invalid_config_request())?;
+        let body = serde_json::to_string(route).map_err(|_| HostError::invalid_config_request())?;
+        let path = format!("/v1/routes/{}", encode_path_segment(id));
+        let mut response = http_request("PUT", self.port, &path, &body, true)?;
+        if response.status < 200 || response.status >= 300 {
+            return Err(HostError::sidecar_proxy_http_error());
+        }
+        let body = response.body.read_to_end(MAX_JSON_BODY_BYTES)?;
+        parse_route_config_response(&body)
+    }
+
+    fn delete_route(&self, route_id: &str) -> Result<ConfigDeleteResponse, HostError> {
+        let path = format!("/v1/routes/{}", encode_path_segment(route_id));
+        let mut response = http_request("DELETE", self.port, &path, "", true)?;
+        if response.status < 200 || response.status >= 300 {
+            return Err(HostError::sidecar_proxy_http_error());
+        }
+        let body = response.body.read_to_end(MAX_JSON_BODY_BYTES)?;
+        parse_config_delete_response(&body)
     }
 }
 

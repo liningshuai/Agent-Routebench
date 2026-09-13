@@ -97,7 +97,7 @@ describe("Task 19 response boundary: typed backend results", () => {
     const backend = rustFile("backend.rs");
     const region = backend.slice(
       backend.indexOf("pub enum HostSessionStatus"),
-      backend.indexOf("pub trait HostBackend"),
+      backend.indexOf("/// Closed response shapes"),
     );
     // Response fields are private; only validated constructors build them.
     expect(region).not.toMatch(/pub\s+(?:id|status|created_at|updated_at|active_turn_id|turn_id|ok|session):/);
@@ -120,7 +120,12 @@ describe("Task 19 response boundary: validated constructors and fixed errors", (
 
   test("success responses never embed credential or URL material", () => {
     const backend = rustFile("backend.rs");
-    const region = backend.slice(0, backend.indexOf("#[cfg(test)]")).toLowerCase();
+    // Task 27 introduces a separate, validated configuration response seam.
+    // This historical Task 19 assertion applies only to the model response
+    // types, which still remain credential-free.
+    const region = backend
+      .slice(0, backend.indexOf("/// Closed response shapes"))
+      .toLowerCase();
     for (const forbidden of [
       "apikey",
       "api_key",
