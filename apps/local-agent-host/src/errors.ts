@@ -6,7 +6,11 @@ export type LocalAgentHostErrorCode =
   | "already_started"
   | "start_failed"
   | "close_failed"
-  | "runner_not_ready";
+  | "runner_not_ready"
+  | "invalid_config_path"
+  | "config_not_found"
+  | "config_invalid"
+  | "invalid_credentials";
 
 /**
  * Fixed messages, one per code. They never embed the underlying exception,
@@ -20,6 +24,10 @@ export const LOCAL_AGENT_HOST_ERROR_MESSAGES = {
   start_failed: "Local agent host failed to start.",
   close_failed: "Local agent host failed to close.",
   runner_not_ready: "Local agent runner is not ready.",
+  invalid_config_path: "Configuration file path is invalid.",
+  config_not_found: "Configuration file was not found.",
+  config_invalid: "Configuration file is invalid.",
+  invalid_credentials: "Credential store is invalid.",
 } as const satisfies Record<LocalAgentHostErrorCode, string>;
 
 /** The single error type thrown across the host boundary. */
@@ -29,6 +37,17 @@ export class LocalAgentHostError extends Error {
   constructor(code: LocalAgentHostErrorCode) {
     super(LOCAL_AGENT_HOST_ERROR_MESSAGES[code]);
     this.name = "LocalAgentHostError";
+    this.code = code;
+  }
+}
+
+/** Fixed error for config bootstrap failures. */
+export class ConfigBootstrapError extends Error {
+  readonly code: LocalAgentHostErrorCode;
+
+  constructor(code: LocalAgentHostErrorCode) {
+    super(LOCAL_AGENT_HOST_ERROR_MESSAGES[code]);
+    this.name = "ConfigBootstrapError";
     this.code = code;
   }
 }

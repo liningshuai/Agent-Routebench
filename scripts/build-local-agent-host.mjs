@@ -30,6 +30,7 @@ const PACKAGE_ENTRIES = [
   ["provider-registry", "packages/provider-registry/src/index.ts"],
   ["local-agent-api", "packages/local-agent-api/src/index.ts"],
   ["agent-backend", "packages/agent-backend/src/index.ts"],
+  ["local-persistence", "packages/local-persistence/src/index.ts"],
 ];
 
 function run(command, cwd) {

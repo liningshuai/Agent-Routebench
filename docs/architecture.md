@@ -828,3 +828,26 @@ Agent Backend / NotReady boundary
 - 错误消息固定，不回显路径/端口/URL/异常
 - NotReady Host 的 turn 产生固定 `runner_error`，不伪造 `completed`
 - 详见 [Native Proxy](native-proxy.md) 与 [Task 24 报告](verification/task-24-report.md)。
+
+
+### Task 25（已完成：配置启动引导与可注入凭据边界）
+
+新增 `createConfiguredLocalAgentHost`：从非敏感配置文件安全启动 Node Local Agent Host。
+
+```text
+config file
+  ↓ loadProviderRegistry()
+fresh InMemoryProviderRegistry
+  ↓ createAgentBackendRunner()
+Local Agent Host (loopback)
+```
+
+边界：
+
+- 配置在 Listener 启动前完成加载；失败时不绑定端口
+- 凭据只能显式注入；默认 fail-closed `UnavailableCredentialStore`
+- 启动阶段 `CredentialStore.get()` 调用数 = 0
+- 不从配置文件、环境变量或 CLI 参数读取 secret
+- 不是 OS Keychain 实现
+- 复用既有 `local-persistence`、`agent-backend`、`local-agent-api`
+- 详见 [Config Bootstrap](config-bootstrap.md) 与 [Task 25 报告](verification/task-25-report.md)。
