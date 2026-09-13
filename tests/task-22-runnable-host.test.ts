@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
   createLocalAgentHost,
@@ -283,5 +284,26 @@ describe("Task 22: runnable host composition", () => {
     } finally {
       await host.close();
     }
+  });
+
+  test("the Task 22 report matches the measured evidence", () => {
+    const report = readFileSync(
+      new URL("../docs/verification/task-22-report.md", import.meta.url),
+      "utf8",
+    );
+
+    expect(report).toContain("Task 20（48）");
+    expect(report).toContain("security:scan（353 files）");
+    expect(report).toContain("实现后聚焦 **34 passed**");
+    expect(report).toContain("全量 93 文件 / 1729 测试");
+    expect(report).toContain("当前共 34 个");
+    expect(report).toContain(
+      "## 15. 受控变异逐项结果（8 项执行；7 检出；1 未检出）",
+    );
+    expect(report).not.toContain("8 项执行；8 检出");
+    expect(report).not.toContain("<提交后填写>");
+    expect(report).toContain(
+      "e2a7d2ce820fc592979bc387a012c62856509663",
+    );
   });
 });

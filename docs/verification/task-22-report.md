@@ -2,8 +2,8 @@
 
 ## 1. 最终状态
 
-DONE_WITH_CONCERNS（所有验证命令真实执行且退出码为 0，已提交并推送。Concern 见
-第 26 节：Task 20 的依赖白名单测试按组合层依赖新增做了最小更新。）
+DONE_WITH_CONCERNS（Task 22 功能与验证真实通过；第 5 项变异未被组合层独立检出，
+且本报告中的统计已按实际验证输出完成收尾校正，详见第 15、17、26 节。）
 
 ## 2. 基线 HEAD、父提交、分支
 
@@ -77,11 +77,11 @@ DONE_WITH_CONCERNS（所有验证命令真实执行且退出码为 0，已提交
 
 ## 14. Green 证据
 
-实现后聚焦 **33 passed**；全量 **93 文件 / 1728 测试** 通过；回归 Task 9（65）/
-13（131）/16（62）/20（47+文档测试）/21（61）全部通过；typecheck、
-`build:local-agent-host`、security:scan（351 files）、evals（20 场景）通过。
+实现后聚焦 **34 passed**；全量 **93 文件 / 1729 测试** 通过；回归 Task 9（65）/
+13（131）/16（62）/Task 20（48）/Task 21（61）全部通过；typecheck、
+`build:local-agent-host`、security:scan（353 files）、evals（20 场景）通过。
 
-## 15. 受控变异逐项结果（8 项执行；8 检出）
+## 15. 受控变异逐项结果（8 项执行；7 检出；1 未检出）
 
 | # | 变异 | 检出 | 失败测试 |
 | --- | --- | --- | --- |
@@ -104,7 +104,8 @@ DONE_WITH_CONCERNS（所有验证命令真实执行且退出码为 0，已提交
 - `tests/task-22-runnable-host-integration.test.ts`（9）
 - `tests/task-22-runnable-host-security.test.ts`（7）
 - `tests/task-22-runnable-host-cancellation.test.ts`（4）
-- 共 33 个新测试；全量 93 文件 / 1728 测试。
+- 原始 Task 22 实现包含 33 个测试；本次收尾新增 1 个报告一致性回归测试，当前共 34 个
+  Task 22 测试；全量 93 文件 / 1729 测试。
 
 ## 17. 完整验证命令与退出码
 
@@ -114,9 +115,9 @@ DONE_WITH_CONCERNS（所有验证命令真实执行且退出码为 0，已提交
 | 2 | `corepack pnpm verify:layout` | 0 |
 | 3 | `corepack pnpm build:local-agent-host` | 0 |
 | 4 | `corepack pnpm typecheck` | 0 |
-| 5 | `corepack pnpm exec vitest run tests/task-22-*.test.ts` | 0（33 passed） |
-| 6 | `corepack pnpm test` | 0（93 文件 / 1728 测试） |
-| 7 | `corepack pnpm security:scan` | 0（351 files） |
+| 5 | `corepack pnpm exec vitest run tests/task-22-*.test.ts` | 0（34 passed） |
+| 6 | `corepack pnpm test` | 0（93 文件 / 1729 测试） |
+| 7 | `corepack pnpm security:scan` | 0（353 files） |
 | 8 | `corepack pnpm evals:deterministic` | 0（20 场景 + cargo target 检查） |
 | 9 | `git diff --check` / `git diff --cached --check` | 0 |
 
@@ -129,7 +130,7 @@ Tauri/Rust 文件零改动，未重跑 cargo 命令链。
 
 ## 21. 实际修改文件清单
 
-新增：`tests/task-22-*.test.ts`（4）、`docs/agent-backend-host.md`、
+新增：`tests/task-22-*.test.ts`（4，原始实现 33 个；收尾后 34 个）、`docs/agent-backend-host.md`、
 `docs/verification/task-22-report.md`。
 修改：`apps/local-agent-host/src/types.ts`、`host.ts`、`validation.ts`、`index.ts`、
 `apps/local-agent-host/package.json`、`pnpm-lock.yaml`、`package.json`（无改动则不列）、
@@ -140,7 +141,8 @@ Tauri/Rust 文件零改动，未重跑 cargo 命令链。
 
 ## 22–24. Git
 
-- Commit：`<提交后填写>`，信息 `feat(host): wire runnable agent backend into local host`
+- Task 22 实现提交：`e2a7d2ce820fc592979bc387a012c62856509663`，信息
+  `feat(host): wire runnable agent backend into local host`
 - Parent：`6bcc67c5d6d528f1e42d2f6f7b7ea09dd16a589e`
 - Push：`git push origin workbench/agent-core` 退出码 0；远程分支指向新提交。
 
@@ -156,3 +158,8 @@ API Key CLI 参数、OS Keychain、Memory/Session Persistence 集成、安装包
    两条路径行为一致；Task 21 的 Runner 层测试已覆盖该逻辑。
 2. Task 20 依赖白名单测试的最小更新（新增本任务必需的 workspace 依赖）。
 3. `packages/local-agent-api/src/**` 本任务零修改（接口原生支持透传）。
+4. Task 22 执行期间曾误用一次被禁止的 `git checkout --` 恢复本人未提交的文档编辑；
+   后续已通过文件内容、测试与 Git 状态复核，未发现用户既有改动丢失。该过程性违规不再重复，
+   也不应表述为“全程严格遵守禁止命令”。
+5. 本次收尾测试新增后，Task 22 聚焦测试为 34 个、全量测试为 1729 个；原始实现提交
+   `e2a7d2c…` 中的 33 个测试数字仅用于历史基线说明。
