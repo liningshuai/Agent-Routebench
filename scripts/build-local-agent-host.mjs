@@ -148,18 +148,59 @@ function writeRuntimePackageMetadata() {
   );
 }
 
+/**
+ * Best-effort recursive delete. A transient output directory that cannot be
+ * removed (interrupted run, locked file, platform restriction) must never
+ * fail a build whose real result is already in place.
+ */
+function removeQuietly(dir) {
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch {
+    // Leftover transient directories are git-ignored and cleaned up on the
+    // next run; the swapped-in dist stays valid either way.
+  }
+}
+
+/**
+ * Removes staging/retiring leftovers from earlier interrupted runs.
+ * Only ever touches the build's own transient directories.
+ */
+function cleanupStaleOutputs() {
+  let entries;
+  try {
+    entries = readdirSync(appDir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry === "dist-staging" || entry.startsWith("dist-retiring")) {
+      removeQuietly(join(appDir, entry));
+    }
+  }
+}
+
 function main() {
   if (!existsSync(join(appDir, "src"))) {
     throw new Error("local-agent-host source directory is missing");
   }
+  cleanupStaleOutputs();
   rmSync(stagingDir, { recursive: true, force: true });
   compileHost();
   compileWorkspacePackages();
   rewriteWorkspaceImports();
   assertNoBareImportsRemain();
   writeRuntimePackageMetadata();
-  rmSync(distDir, { recursive: true, force: true });
+  // Atomic swap: the outgoing dist is moved to a unique retiring name so a
+  // leftover from an interrupted run can never block a later build, and its
+  // removal is best-effort. Concurrent readers never see a missing dist.
+  const retiringDir = `${distDir}-retiring-${process.pid}-${Date.now()}`;
+  if (existsSync(distDir)) {
+    renameSync(distDir, retiringDir);
+  }
   renameSync(stagingDir, distDir);
+  removeQuietly(retiringDir);
+  cleanupStaleOutputs();
   console.log("build:local-agent-host wrote a self-contained dist resource");
 }
 

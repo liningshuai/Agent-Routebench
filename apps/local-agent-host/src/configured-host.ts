@@ -5,7 +5,9 @@ import {
   loadProviderRegistry,
 } from "@agent-workbench/local-persistence";
 import { createAgentBackendRunner } from "@agent-workbench/agent-backend";
-import type { HttpClient } from "@agent-workbench/model-gateway";
+import type { AgentBackendOptions } from "@agent-workbench/agent-backend";
+import type { ToolApprovalHandler, ToolExecutor, ToolPolicy } from "@agent-workbench/agent-runtime";
+import type { HttpClient, RetryPolicy, RetryWait } from "@agent-workbench/model-gateway";
 import type { CredentialStore } from "@agent-workbench/provider-registry";
 
 import { ConfigBootstrapError } from "./errors.js";
@@ -22,7 +24,41 @@ export interface ConfiguredLocalAgentHostOptions {
   readonly httpClient?: HttpClient;
   /** Creates an empty version-1 snapshot when the path does not exist. */
   readonly createIfMissing?: boolean;
+
+  // ── Optional Agent Backend passthrough ────────────────────────────────
+  // These are forwarded verbatim to the existing Agent Backend assembly so
+  // the configured host can run the same governed tool / retry chain the
+  // backend already documents. Nothing is created implicitly: omitting them
+  // keeps the backend's own fail-closed defaults (no policy ⇒ deny).
+  readonly toolExecutor?: ToolExecutor;
+  readonly policy?: ToolPolicy;
+  readonly approvalHandler?: ToolApprovalHandler;
+  readonly retryPolicy?: Partial<RetryPolicy>;
+  readonly wait?: RetryWait;
+  readonly maxTurns?: number;
+  readonly maxToolCallsPerTurn?: number;
+  readonly maxToolResultBytes?: number;
+  readonly defaultMaxTokens?: number;
+  readonly maxFrameBytes?: number;
+  readonly maxToolInputBytes?: number;
 }
+
+/** Backend options the configured host forwards, in a fixed order. */
+const BACKEND_OPTION_KEYS = [
+  "httpClient",
+  "retryPolicy",
+  "wait",
+  "toolExecutor",
+  "policy",
+  "approvalHandler",
+  "maxTurns",
+  "maxToolCallsPerTurn",
+  "maxToolResultBytes",
+  "defaultMaxTokens",
+  "maxFrameBytes",
+  "maxToolInputBytes",
+] as const;
+
 
 /**
  * Validates that the config file path is a safe absolute path.
@@ -142,12 +178,24 @@ export async function createConfiguredLocalAgentHost(
   }
 
   // Assemble the backend runner. No credential read, no HTTP, no provider
-  // call happens here — the runner is lazy.
-  const runner = createAgentBackendRunner({
-    registry,
-    credentials,
-    ...(options.httpClient !== undefined ? { httpClient: options.httpClient } : {}),
-  });
+  // call happens here — the runner is lazy. Only explicitly supplied backend
+  // options are forwarded, so the backend keeps its own fail-closed defaults.
+  const backendOptions: Record<string, unknown> = { registry, credentials };
+  const rawOptions = options as unknown as Record<string, unknown>;
+  for (const key of BACKEND_OPTION_KEYS) {
+    const value = rawOptions[key];
+    if (value !== undefined) {
+      backendOptions[key] = value;
+    }
+  }
+  let runner;
+  try {
+    runner = createAgentBackendRunner(backendOptions as unknown as AgentBackendOptions);
+  } catch {
+    // The backend validates its own options; a rejection is reported through
+    // this bootstrap's fixed contract instead of leaking the inner error.
+    throw new ConfigBootstrapError("invalid_backend_options");
+  }
 
   const configManager = createConfigManager({
     registry,

@@ -81,6 +81,25 @@ const ROUTE_RESPONSE_FIELDS = new Set([
   "fallbackProviderIds",
 ]);
 
+/**
+ * The configuration API is whitelist-only: a request body may carry exactly
+ * the non-sensitive provider/route fields the response contract exposes.
+ * Unknown fields are rejected with the same fixed error as a sensitive one,
+ * so a caller cannot smuggle extra state (or a secret under an unexpected
+ * name) into the persisted configuration.
+ */
+const PROVIDER_CONFIG_FIELDS = PROVIDER_RESPONSE_FIELDS;
+const ROUTE_CONFIG_FIELDS = ROUTE_RESPONSE_FIELDS;
+
+function assertOnlyAllowedConfigFields(
+  value: Record<string, unknown>,
+  allowed: ReadonlySet<string>,
+): void {
+  if (Object.keys(value).some((key) => !allowed.has(key))) {
+    throw new ApiValidationError("invalidConfigRequest");
+  }
+}
+
 function assertSafeProvider(value: unknown): Record<string, unknown> {
   if (!isRecord(value) || Object.keys(value).some((key) => !PROVIDER_RESPONSE_FIELDS.has(key))) {
     throw new Error("invalid config response");
@@ -554,6 +573,7 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
           if (!isRecord(body)) {
             throw new ApiValidationError("invalidConfigRequest");
           }
+          assertOnlyAllowedConfigFields(body, PROVIDER_CONFIG_FIELDS);
           sendJson(res, 201, safeConfigEntity(await manager.createProvider(body), "provider"));
         } catch (error) {
           sendConfigFailure(error);
@@ -568,6 +588,7 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
           if (!isRecord(body)) {
             throw new ApiValidationError("invalidConfigRequest");
           }
+          assertOnlyAllowedConfigFields(body, ROUTE_CONFIG_FIELDS);
           sendJson(res, 201, safeConfigEntity(await manager.createRoute(body), "route"));
         } catch (error) {
           sendConfigFailure(error);
@@ -595,6 +616,7 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
             if (!isRecord(body) || body.id !== id) {
               throw new ApiValidationError("invalidConfigRequest");
             }
+            assertOnlyAllowedConfigFields(body, PROVIDER_CONFIG_FIELDS);
             sendJson(res, 200, safeConfigEntity(await manager.updateProvider(body), "provider"));
           } catch (error) {
             sendConfigFailure(error);
@@ -625,6 +647,7 @@ class LocalAgentHttpServer implements LocalAgentApiServer {
             if (!isRecord(body) || body.id !== id) {
               throw new ApiValidationError("invalidConfigRequest");
             }
+            assertOnlyAllowedConfigFields(body, ROUTE_CONFIG_FIELDS);
             sendJson(res, 200, safeConfigEntity(await manager.updateRoute(body), "route"));
           } catch (error) {
             sendConfigFailure(error);

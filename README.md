@@ -4,6 +4,16 @@
 
 ## 当前阶段
 
+**Task 28 完成：最终集成、发布就绪与范围收敛**。本任务不新增业务领域，只把 Task 0–27 的能力收敛成一条真实、可验证、可发布的 MVP 链路，并修掉收敛过程中发现的真实缺口：
+
+- 端到端链路已贯通并逐层验证：`Desktop UI → DesktopConfigApiClient/DesktopApiClient → Tauri invoke/listen → Rust Native Proxy → Node Sidecar → Local Agent API → ConfigManager/ProviderRegistry/CredentialStore → Agent Backend → Resilient Gateway/Agent Runtime → NDJSON`；集成测试使用注入式 fake Provider HTTP client 与 fake CredentialBackend，不访问真实网络或真实凭据
+- 真实缺口修复：配置 API 现在只允许白名单字段（未知字段与敏感字段同样返回固定 400，不再静默接受）；`createConfiguredLocalAgentHost()` 可显式透传 toolExecutor/policy/approvalHandler/retryPolicy 等 Backend 选项，使多轮工具与策略链能端到端跑通；Desktop 构建清理改为唯一 retiring 名 + best-effort 清理，并忽略 `dist-staging/`、`dist-retiring*/`，不再残留未跟踪产物或阻塞后续构建；Desktop 配置错误改用固定的 `config_load_failed` / `config_mutation_failed`
+- Rust 构建可复现性：`src-tauri` 关闭 incremental（`[profile.dev] incremental = false`），规避 rustc 1.98.1 在多 crate-type 元数据编码上的 ICE，使 `cargo test` 稳定通过
+- 新增 `verify:release` 验收入口：串联 verify:layout、typecheck、两个构建、全量测试、安全扫描、确定性评测、cargo fmt/check/test，并断言无 `src-tauri/target`、无残留未跟踪文件
+- 安全边界保持：loopback-only、无远程 devUrl、无外部 CDN、无 shell 启动、CSP 严格、错误消息固定、secret 不落盘、启动阶段不读凭据、默认 CredentialStore fail-closed
+- Task 28 新增 126 个聚焦测试（5 个文件），全量 TypeScript 2106 个测试通过，Rust 98 个单元测试通过；14 项受控变异全部被检出并原位恢复
+- 未实现（明确不在本任务范围）：真实 Provider E2E、真实 API Key、OS Keychain、云端同步、SQLite、Web UI、托盘、自动更新、安装包签名、多用户鉴权、远程部署
+
 **Task 27 返工完成：Provider / Route 配置管理与 Desktop 设置闭环**。当前版本已经把配置从 Desktop 设置页贯通到 Tauri Native Proxy、Node Local Agent Host 和持久化 Registry：
 
 - Desktop 设置页通过 `DesktopConfigApiClient` 查看和修改 Provider/Route 的非敏感字段；不接收 API key、token 或 Authorization
@@ -245,6 +255,20 @@ pnpm typecheck
 pnpm test
 pnpm security:scan
 pnpm evals:deterministic
+```
+
+发布前的完整验收入口（串联上述检查、两个构建、Rust fmt/check/test 与产物/工作区不变量）：
+
+```powershell
+corepack pnpm verify:release
+```
+
+Rust 宿主单独验证：
+
+```powershell
+cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml -- --check
+cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
+cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib
 ```
 
 ## 文档

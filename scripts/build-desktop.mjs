@@ -291,16 +291,53 @@ function releaseBuildLock() {
 }
 
 /**
+ * Best-effort recursive delete. A transient output directory that cannot be
+ * removed (interrupted run, locked file, platform restriction) must never
+ * fail a build whose real result is already in place.
+ */
+function removeQuietly(dir) {
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch {
+    // Leftover transient directories are git-ignored and cleaned up on the
+    // next run; the swapped-in dist stays valid either way.
+  }
+}
+
+/**
+ * Removes staging/retiring leftovers from earlier interrupted runs.
+ * Only ever touches the build's own transient directories.
+ */
+function cleanupStaleOutputs() {
+  let entries;
+  try {
+    entries = readdirSync(desktopDir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry === "dist-staging" || entry.startsWith("dist-retiring")) {
+      removeQuietly(join(desktopDir, entry));
+    }
+  }
+}
+
+/**
  * Atomically replaces dist with the freshly built staging directory.
+ *
+ * The outgoing directory is moved to a *unique* retiring name so a leftover
+ * from an interrupted run can never block a later build, and its removal is
+ * best-effort. Concurrent readers therefore never observe a missing or
+ * half-written dist.
  */
 function swapStagingIntoDist() {
-  const retiringDir = `${distDir}-retiring`;
-  rmSync(retiringDir, { recursive: true, force: true });
+  const retiringDir = `${distDir}-retiring-${process.pid}-${Date.now()}`;
   if (existsSync(distDir)) {
     renameSync(distDir, retiringDir);
   }
   renameSync(stagingDir, distDir);
-  rmSync(retiringDir, { recursive: true, force: true });
+  removeQuietly(retiringDir);
+  cleanupStaleOutputs();
 }
 
 /**
@@ -336,6 +373,7 @@ function inputFingerprint() {
 
 function main() {
   assertCleanSlate();
+  cleanupStaleOutputs();
   // Lock-free fast path: when dist already matches the current inputs,
   // concurrent callers (for example parallel vitest hooks) return instantly
   // without ever contending on the build lock.

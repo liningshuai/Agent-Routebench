@@ -5,6 +5,8 @@ export const DESKTOP_ERROR_CODES = {
   SESSION_NOT_FOUND: "session_not_found",
   TURN_FAILED: "turn_failed",
   CANCEL_FAILED: "cancel_failed",
+  CONFIG_LOAD_FAILED: "config_load_failed",
+  CONFIG_MUTATION_FAILED: "config_mutation_failed",
 } as const;
 
 export const DESKTOP_ERROR_MESSAGES = {
@@ -14,6 +16,8 @@ export const DESKTOP_ERROR_MESSAGES = {
   SESSION_NOT_FOUND: "Session not found.",
   TURN_FAILED: "Failed to submit turn.",
   CANCEL_FAILED: "Failed to cancel turn.",
+  CONFIG_LOAD_FAILED: "Failed to load configuration.",
+  CONFIG_MUTATION_FAILED: "Failed to save configuration.",
 } as const;
 
 export class DesktopError extends Error {

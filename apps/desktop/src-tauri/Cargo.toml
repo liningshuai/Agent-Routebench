@@ -16,3 +16,15 @@ tauri-build = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }
+
+# Incremental compilation is disabled deliberately.
+#
+# This crate declares three crate types (staticlib, cdylib, rlib). With
+# incremental compilation enabled, rustc 1.98.1 intermittently panics in the
+# metadata encoder ("no entry found for key" in rmeta/encoder.rs) while
+# emitting the combined metadata, which makes `cargo test` and the release
+# gate fail with an internal compiler error rather than a real defect.
+# Disabling incremental keeps the Rust build reproducible; for a crate this
+# size the rebuild cost is negligible. `cargo test --lib` is unaffected.
+[profile.dev]
+incremental = false

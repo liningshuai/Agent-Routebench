@@ -45,6 +45,7 @@ Anthropic Messages   OpenAI-compatible
 - **Configured Host**（Task 25）：Node Host 在监听前加载并校验非敏感配置快照，恢复 ProviderRegistry，并通过显式 CredentialStore 注入组装 Backend
 - **Secure Credential Store boundary**（Task 26）：CredentialStore 的 credentialRef/secret 校验和 fail-closed backend 边界
 - **Provider / Route Configuration Management**（Task 27）：ConfigManager、Local Agent API 配置端点、Tauri 配置 commands/native proxy 与 Desktop 设置页形成完整闭环
+- **Final Integration**（Task 28）：把上述所有层级收敛为一条可运行、可验证、可发布的 MVP 链路，并补齐最后三处缺口（配置 API 字段白名单、Configured Host 的 Backend 选项透传、Desktop 构建产物清理）
 
 未完成层级：
 
@@ -908,3 +909,42 @@ ConfigManager → ProviderRegistry + local-persistence
 - 首次启动使用 app-scoped 配置文件；配置文件路径通过无 shell 的 sidecar 参数传入，Node Host 在监听前完成校验和加载
 - Desktop 设置页通过 `DesktopConfigApiClient` 读写 Provider/Route 非敏感字段，并在客户端再次校验响应
 - 详见 [Config Management](config-management.md) 与 [Task 27 报告](verification/task-27-report.md)。
+
+
+### Task 28（已完成：最终集成、发布就绪与范围收敛）
+
+Task 28 不新增业务领域，只把已有能力收敛成一条真实、可验证的端到端链路，并修掉收敛过程中
+发现的真实缺口。
+
+最终数据流：
+
+```text
+Desktop UI
+  → DesktopConfigApiClient / DesktopApiClient
+  → Tauri invoke/listen bridge
+  → Rust Native Proxy (NodeSidecarBackend)
+  → Node Sidecar (Local Agent Host)
+  → Local Agent API
+  → ConfigManager / ProviderRegistry / CredentialStore
+  → Agent Backend
+  → Resilient Gateway / Agent Runtime
+  → NDJSON events → Desktop / Client
+```
+
+本次修复的真实缺口：
+
+| 缺口 | 现象 | 修复 |
+|------|------|------|
+| 配置 API 未做字段白名单 | `POST /v1/providers` 携带未知字段返回 201（未知字段被静默丢弃） | `packages/local-agent-api/src/server.ts` 新增 `assertOnlyAllowedConfigFields`，provider/route 请求体只允许响应契约中的非敏感字段 |
+| Configured Host 无法注入 Backend 选项 | `createConfiguredLocalAgentHost()` 只转发 registry/credentials/httpClient，无法端到端跑通多轮工具与策略链 | `apps/local-agent-host/src/configured-host.ts` 新增显式透传（toolExecutor / policy / approvalHandler / retryPolicy / wait / maxTurns 等），非法组合折叠为固定 `invalid_backend_options` |
+| Desktop 构建产物清理不健壮 | 清理失败时残留未跟踪的 `dist-retiring/`、`dist-staging/`，并让后续 `build:desktop` 直接失败 | `scripts/build-desktop.mjs` 改用唯一 retiring 名 + best-effort 清理 + 启动时清理陈旧产物；`.gitignore` 覆盖这两个瞬时目录 |
+| Desktop 配置错误码语义错误 | 配置读写失败复用 `session_create_failed` / `cancel_failed` | `apps/desktop/src/errors.ts` 新增 `config_load_failed` / `config_mutation_failed`，配置客户端改用之 |
+
+边界：
+
+- 配置 API 是白名单边界：未知字段与敏感字段返回同一个固定 400 错误，不回显输入值。
+- CredentialStore 仍只在真实 Turn 需要认证时按需读取一次；启动、健康检查、配置读写都不读凭据。
+- 默认 CredentialStore 仍 fail-closed；CredentialBackend 只能显式注入；不从环境变量、CLI 参数或配置文件读取 API Key。
+- 所有 provider-facing HTTP 仍由显式注入的 fake client 驱动；测试不访问真实网络、不读取真实凭据。
+- Task 28 未实现：真实 Provider E2E、真实 API Key、OS Keychain、云端同步、SQLite、Web UI、托盘、自动更新、安装包签名、多用户鉴权、远程部署。
+- 详见 [Task 28 报告](verification/task-28-report.md) 与 [Desktop](desktop.md)。

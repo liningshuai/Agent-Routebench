@@ -11,7 +11,8 @@ export type LocalAgentHostErrorCode =
   | "config_not_found"
   | "config_write_failed"
   | "config_invalid"
-  | "invalid_credentials";
+  | "invalid_credentials"
+  | "invalid_backend_options";
 
 /**
  * Fixed messages, one per code. They never embed the underlying exception,
@@ -30,6 +31,7 @@ export const LOCAL_AGENT_HOST_ERROR_MESSAGES = {
   config_write_failed: "Configuration file could not be created.",
   config_invalid: "Configuration file is invalid.",
   invalid_credentials: "Credential store is invalid.",
+  invalid_backend_options: "Agent backend options are invalid.",
 } as const satisfies Record<LocalAgentHostErrorCode, string>;
 
 /** The single error type thrown across the host boundary. */

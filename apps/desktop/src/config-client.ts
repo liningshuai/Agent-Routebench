@@ -240,7 +240,7 @@ class DesktopConfigClient implements DesktopConfigApiClient {
       }
       return parseSnapshot(await this.#invoke(CONFIG_COMMANDS.getConfig));
     } catch {
-      throw createDesktopError("CONNECTION_FAILED");
+      throw createDesktopError("CONFIG_LOAD_FAILED");
     }
   }
 
@@ -262,7 +262,7 @@ class DesktopConfigClient implements DesktopConfigApiClient {
       }
       return parseProvider(response.provider);
     } catch {
-      throw createDesktopError("SESSION_CREATE_FAILED");
+      throw createDesktopError("CONFIG_MUTATION_FAILED");
     }
   }
 
@@ -284,7 +284,7 @@ class DesktopConfigClient implements DesktopConfigApiClient {
       }
       return parseProvider(response.provider);
     } catch {
-      throw createDesktopError("SESSION_CREATE_FAILED");
+      throw createDesktopError("CONFIG_MUTATION_FAILED");
     }
   }
 
@@ -299,7 +299,7 @@ class DesktopConfigClient implements DesktopConfigApiClient {
       assertNonEmptyString(providerId);
       await this.#invoke(CONFIG_COMMANDS.deleteProvider, { providerId });
     } catch {
-      throw createDesktopError("CANCEL_FAILED");
+      throw createDesktopError("CONFIG_MUTATION_FAILED");
     }
   }
 
@@ -321,7 +321,7 @@ class DesktopConfigClient implements DesktopConfigApiClient {
       }
       return parseRoute(response.route);
     } catch {
-      throw createDesktopError("SESSION_CREATE_FAILED");
+      throw createDesktopError("CONFIG_MUTATION_FAILED");
     }
   }
 
@@ -343,7 +343,7 @@ class DesktopConfigClient implements DesktopConfigApiClient {
       }
       return parseRoute(response.route);
     } catch {
-      throw createDesktopError("SESSION_CREATE_FAILED");
+      throw createDesktopError("CONFIG_MUTATION_FAILED");
     }
   }
 
@@ -358,7 +358,7 @@ class DesktopConfigClient implements DesktopConfigApiClient {
       assertNonEmptyString(routeId);
       await this.#invoke(CONFIG_COMMANDS.deleteRoute, { routeId });
     } catch {
-      throw createDesktopError("CANCEL_FAILED");
+      throw createDesktopError("CONFIG_MUTATION_FAILED");
     }
   }
 }

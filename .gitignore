@@ -1,6 +1,9 @@
 node_modules/
 .pnpm-store/
 dist/
+# Transient build directories of the Desktop build swap.
+dist-staging/
+dist-retiring*/
 coverage/
 .turbo/
 .vite/

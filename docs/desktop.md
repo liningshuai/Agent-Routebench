@@ -115,9 +115,14 @@ Fixed error codes with structured `DesktopError`:
 const DESKTOP_ERROR_CODES = {
   NOT_CONNECTED: "not_connected",
   CONNECTION_FAILED: "connection_failed",
+  SESSION_CREATE_FAILED: "session_create_failed",
   SESSION_NOT_FOUND: "session_not_found",
   TURN_FAILED: "turn_failed",
   CANCEL_FAILED: "cancel_failed",
+  // Task 28: the configuration client no longer reuses the session/turn
+  // codes, so a configuration failure is never reported as a turn failure.
+  CONFIG_LOAD_FAILED: "config_load_failed", // "Failed to load configuration."
+  CONFIG_MUTATION_FAILED: "config_mutation_failed", // "Failed to save configuration."
 } as const;
 ```
 
@@ -202,6 +207,39 @@ See `docs/verification/task-15-mutations.md` and `docs/verification/task-14-muta
 - Event streaming simulation
 - AbortSignal integration
 - No external dependencies
+
+### Task 28 final acceptance
+
+`tests/task-28-final-desktop.test.ts` (jsdom) is the final acceptance surface for
+the renderer. It asserts, against the real `mountDesktopUi()`:
+
+- the active session and its id are displayed after creation;
+- Send is disabled for an empty draft and enabled afterwards;
+- Cancel replaces Send while a turn is in flight;
+- the draft is restored verbatim after a cancellation;
+- streamed `text_delta` text is accumulated and displayed;
+- every streamed XSS payload is escaped (no live tag, no live attribute);
+- `tool_call.input` never reaches the session surface;
+- the configuration panel lists providers/routes, refreshes, and creates,
+  edits and deletes both entities through the injected client;
+- configuration failures show the fixed `Failed to load configuration.` /
+  `Failed to save provider.` text and never echo the underlying exception;
+- the settings surface exposes only whitelisted, non-secret fields
+  (`id`, `name`, `protocol`, `baseUrl`, `credentialRef`, `models`, `enabled`)
+  and never an `apiKey`/`token`/`authorization`/`password`/`secret` field.
+
+`renderDesktopPage()` is additionally asserted to contain no live event
+attribute, no external origin and no `javascript:` URL target, and to omit
+`tool_call.input`, `route_selected.routeId`, `route_selected.model` and any
+credential reference.
+
+Interpretation note: the *settings* surface intentionally displays and edits the
+non-secret configuration fields `baseUrl` and `credentialRef` (they are
+required to configure a provider, and `credentialRef` is a pointer, not a
+secret). The prohibition on displaying "provider URL / credentialRef /
+Authorization / token" applies to the **conversation surface and the event
+ViewModel**, which is where the leak could reach a user or a log. No secret
+value is ever placed in either surface.
 
 ## Usage Example
 

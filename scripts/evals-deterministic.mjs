@@ -334,6 +334,14 @@ const required = [
   "tests/task-27-rework-integration.test.ts",
   "tests/task-27-rework-desktop.test.ts",
   "docs/verification/task-27-rework-report.md",
+  "tests/task-28-final-integration.test.ts",
+  "tests/task-28-final-security.test.ts",
+  "tests/task-28-final-lifecycle.test.ts",
+  "tests/task-28-final-config.test.ts",
+  "tests/task-28-final-desktop.test.ts",
+  "tests/helpers/task-28-fixtures.ts",
+  "docs/verification/task-28-report.md",
+  "scripts/verify-release.mjs",
 ];
 
 for (const path of required) {
@@ -587,6 +595,14 @@ runScenario("task 27 provider and route management", [
   "tests/task-27-rework-integration.test.ts",
   "tests/task-27-rework-desktop.test.ts",
 ]);
+
+runScenario("task 28 final integration and release readiness", [
+  "tests/task-28-final-integration.test.ts",
+  "tests/task-28-final-security.test.ts",
+  "tests/task-28-final-lifecycle.test.ts",
+  "tests/task-28-final-config.test.ts",
+  "tests/task-28-final-desktop.test.ts",
+]);
 console.log(
   [
     "evals:deterministic passed.",
@@ -707,5 +723,15 @@ console.log(
     "panel renders and edits non-secret provider/route fields without exposing secrets.",
     "The rework also verifies first-run config creation, fixed 400 mapping for registry",
     "validation failures, malformed path handling and the Tauri sidecar config wiring.",
+    "Task 28 closes the release: the configured Local Agent Host is exercised end to end",
+    "through the real Local Agent API, Agent Backend, route resolution, CredentialStore,",
+    "routed gateway, agent runtime and NDJSON stream, using an injected fake provider HTTP",
+    "client and an injected fake credential backend only. It covers text streaming, fixed",
+    "provider errors, retry and ordered failover, multi-turn tool calls, the deny/ask/allow",
+    "policy gate, cancellation without a further round, the single final completed event,",
+    "credential reads only on demand, the configuration whitelist and three-layer response",
+    "shape, the Desktop session and settings acceptance surface, the native startup chain",
+    "and build-output hygiene. No real provider, real credential, external network or",
+    "shell launch is involved anywhere in these scenarios.",
   ].join(" "),
 );
