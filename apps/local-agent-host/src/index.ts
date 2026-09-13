@@ -1,5 +1,5 @@
-export { createLocalAgentHost, NotReadyLocalAgentRunner } from "./host.js";
-export { isLocalAgentRunner, LOOPBACK_HOSTS } from "./validation.js";
+export { createLocalAgentHost, createRunnableLocalAgentHost, NotReadyLocalAgentRunner } from "./host.js";
+export { isLocalAgentRunner, isLocalAgentSessionStore, LOOPBACK_HOSTS, validateRunnableHostOptions } from "./validation.js";
 export {
   LocalAgentHostError,
   LOCAL_AGENT_HOST_ERROR_MESSAGES,
@@ -10,4 +10,5 @@ export type {
   LocalAgentHostMainOptions,
   LocalAgentHostOptions,
   LocalAgentHostState,
+  RunnableLocalAgentHostOptions,
 } from "./types.js";

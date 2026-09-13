@@ -69,3 +69,11 @@ corepack pnpm local-agent-host -- --host 127.0.0.1 --port 8123
 
 Task 20 只提供 loopback Local Agent API Host 入口和生命周期管理；当前仍然没有真实
 Agent Backend、真实模型调用或 Provider 接入。Task 21 才负责完整 Agent Backend 组装。
+
+## Task 22 — Runnable Backend Composition
+
+`createRunnableLocalAgentHost({ host, port, backend, store?, maxBodyBytes? })` 把
+Task 21 的 `AgentBackendOptions` 组装为 Runner 并接入本宿主。默认 `createLocalAgentHost()`
+与 `runLocalAgentHostMain()` 行为不变（NotReady 默认 Runner、无环境变量读取）。
+`LocalAgentHostOptions` 新增可选 `store` 与 `maxBodyBytes`，无损透传给既有服务器。
+详见 [Agent Backend Host Composition](agent-backend-host.md)。

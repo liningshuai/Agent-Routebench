@@ -750,6 +750,12 @@ Task 19 在 Task 18 的原生壳层内建立可注入、可测试、可替换的
 - 同时修正了 `docs/tauri.md` 中 Task 19 的旧 `Result<serde_json::Value, HostError>`
   描述（现为 typed response 表述）。
 
+### Task 22（已完成：Backend 接入 Loopback Host）
+
+`createRunnableLocalAgentHost({ host, port, backend, store?, maxBodyBytes? })` 把 Task 21 的
+Backend 经 `createAgentBackendRunner()` 显式接入 Task 20 的 Loopback Host。默认 Host
+仍为 `NotReadyLocalAgentRunner`；Store/maxBodyBytes 显式透传；组合层校验同步失败于
+监听器创建之前。详见 [Agent Backend Host Composition](agent-backend-host.md)。
 ### Task 21（已完成：组装可运行的 Agent Backend）
 
 新增 workspace 包 `@agent-workbench/agent-backend`：

@@ -84,7 +84,7 @@ describe("Task 20: loopback-only boundary", () => {
     const devDependencies = Object.keys((pkg.devDependencies ?? {}) as Record<string, string>);
     for (const name of dependencies) {
       expect(
-        ["@agent-workbench/local-agent-api", "@agent-workbench/agent-core"].includes(name),
+        ["@agent-workbench/local-agent-api", "@agent-workbench/agent-core", "@agent-workbench/agent-backend"].includes(name),
         `unexpected dependency ${name}`,
       ).toBe(true);
     }

@@ -18,7 +18,8 @@
   },
   "dependencies": {
     "@agent-workbench/agent-core": "workspace:*",
-    "@agent-workbench/local-agent-api": "workspace:*"
+    "@agent-workbench/local-agent-api": "workspace:*",
+    "@agent-workbench/agent-backend": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

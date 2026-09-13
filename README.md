@@ -4,7 +4,16 @@
 
 ## 当前阶段
 
-**Task 21：组装可运行的 Agent Backend（Node 侧）**。新增 workspace 包 `@agent-workbench/agent-backend`，把既有抽象组装成可运行的 `LocalAgentRunner`：
+**Task 22：将可运行 Agent Backend 接入 Loopback Local Agent Host**。在 `@agent-workbench/local-agent-host` 新增显式 Composition API：
+
+- `createRunnableLocalAgentHost({ host, port, backend, store?, maxBodyBytes? })`：backend options → `createAgentBackendRunner()` → `createLocalAgentHost()`，不复制任何既有实现
+- 显式注入：Backend 只能经 `backend` 选项启用；默认 Host 仍为 `NotReadyLocalAgentRunner`，不自动创建 Provider/Route/Model/凭据，不读取环境变量
+- Store 与 maxBodyBytes 显式透传给既有 Local Agent API Server；不注入则用默认内存 Store
+- 校验：拒绝缺失 backend、方法缺失、未知字段、backend+runner 歧义、非法 port/host/maxBodyBytes；同步失败于监听器创建之前，固定错误消息不回显输入
+- 端到端验证：文本流式（唯一 completed）、工具多轮、Provider 失败 → failed、取消 → cancelled、Store 注入生效、Host/Session 隔离、close 后端口释放
+- 仍未实现：Tauri Rust 与 Node Backend 跨进程连接、真实 Provider E2E、自动配置加载、API Key CLI 参数、OS Keychain、安装包/托盘/自动更新
+
+**Task 21：组装可运行的 Agent Backend（Node 侧）**。新增 workspace 包 `@agent-workbench/agent-backend`，把既有抽象组装成可运行的 `LocalAgentRunner`：：组装可运行的 Agent Backend（Node 侧）**。新增 workspace 包 `@agent-workbench/agent-backend`，把既有抽象组装成可运行的 `LocalAgentRunner`：
 
 - 组装链：ProviderRegistry + CredentialStore + 注入 HttpClient → ResilientRoutedHttpModelGateway → createAgentLoop()（可选 createGovernedToolExecutor() fail-closed 闸门）→ LocalAgentRunner；不重新实现任何协议解析、重试、故障转移或多轮逻辑
 - 请求转换：turnId 直接作为 requestId；routeId/model 必填（缺失即固定 invalid_request 事件，不自动选择、不触碰凭据）；maxTokens 缺省用 defaultMaxTokens；messages/tools 防御性复制
@@ -236,6 +245,7 @@ pnpm evals:deterministic
 - [共享 Local Agent API Client](docs/local-agent-client.md)
 - [Desktop Renderer Shell](docs/desktop.md)
 - [Agent Backend](docs/agent-backend.md)
+- [Agent Backend Host Composition](docs/agent-backend-host.md)
 - [Local Agent Host](docs/local-agent-host.md)
 - [许可证边界](docs/licensing.md)
 

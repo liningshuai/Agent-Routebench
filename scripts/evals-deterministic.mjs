@@ -495,6 +495,13 @@ runScenario("task 21 assembled agent backend over the local agent api", [
   "tests/task-21-agent-backend-cancellation.test.ts",
 ]);
 
+
+runScenario("task 22 runnable agent backend host composition", [
+  "tests/task-22-runnable-host.test.ts",
+  "tests/task-22-runnable-host-integration.test.ts",
+  "tests/task-22-runnable-host-security.test.ts",
+  "tests/task-22-runnable-host-cancellation.test.ts",
+]);
 console.log(
   [
     "evals:deterministic passed.",

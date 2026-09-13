@@ -1,4 +1,5 @@
 import type { AgentEvent } from "@agent-workbench/agent-core";
+import { createAgentBackendRunner } from "@agent-workbench/agent-backend";
 import {
   createLocalAgentApiServer,
   type LocalAgentApiServer,
@@ -7,8 +8,13 @@ import {
 } from "@agent-workbench/local-agent-api";
 
 import { LocalAgentHostError } from "./errors.js";
-import type { LocalAgentHost, LocalAgentHostOptions, LocalAgentHostState } from "./types.js";
-import { validateHostOptions } from "./validation.js";
+import type {
+  LocalAgentHost,
+  LocalAgentHostOptions,
+  LocalAgentHostState,
+  RunnableLocalAgentHostOptions,
+} from "./types.js";
+import { validateHostOptions, validateRunnableHostOptions } from "./validation.js";
 
 /**
  * The production default runner. The Agent backend has not been assembled
@@ -48,7 +54,15 @@ export function createLocalAgentHost(options: LocalAgentHostOptions): LocalAgent
       state = "starting";
       startPromise = (async () => {
         try {
-          const created = createLocalAgentApiServer({ host: listenHost, port, runner });
+          const created = createLocalAgentApiServer({
+            host: listenHost,
+            port,
+            runner,
+            ...(options.store !== undefined ? { store: options.store } : {}),
+            ...(options.maxBodyBytes !== undefined
+              ? { maxBodyBytes: options.maxBodyBytes }
+              : {}),
+          });
           await created.start();
           server = created;
           state = "running";
@@ -93,4 +107,35 @@ export function createLocalAgentHost(options: LocalAgentHostOptions): LocalAgent
       return state;
     },
   };
+}
+
+/**
+ * Explicit composition of the runnable Agent Backend (Task 21) into the
+ * loopback host (Task 20):
+ *
+ * ```text
+ * backend options → createAgentBackendRunner() → createLocalAgentHost()
+ * ```
+ *
+ * The composition performs no implicit configuration: no environment reads,
+ * no provider presets, no routes, no credentials, no route or model
+ * selection. Invalid backend options fail synchronously, before any
+ * listener exists. Without this explicit composition the plain
+ * `createLocalAgentHost()` keeps its safe `NotReadyLocalAgentRunner`
+ * default.
+ */
+export function createRunnableLocalAgentHost(
+  options: RunnableLocalAgentHostOptions,
+): LocalAgentHost {
+  validateRunnableHostOptions(options);
+  const runner = createAgentBackendRunner(options.backend);
+  return createLocalAgentHost({
+    ...(options.host !== undefined ? { host: options.host } : {}),
+    port: options.port,
+    runner,
+    ...(options.store !== undefined ? { store: options.store } : {}),
+    ...(options.maxBodyBytes !== undefined
+      ? { maxBodyBytes: options.maxBodyBytes }
+      : {}),
+  });
 }

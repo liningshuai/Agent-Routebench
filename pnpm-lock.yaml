@@ -97,6 +97,9 @@ importers:
 
   apps/local-agent-host:
     dependencies:
+      '@agent-workbench/agent-backend':
+        specifier: workspace:*
+        version: link:../../packages/agent-backend
       '@agent-workbench/agent-core':
         specifier: workspace:*
         version: link:../../packages/agent-core
