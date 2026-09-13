@@ -9,7 +9,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 // Deterministic offline eval entry.
 //
 // Stage 1 verifies the expected layout.
-// Stage 2 actually runs the offline scenarios for Tasks 3â€“16 and propagates
+// Stage 2 actually runs the offline scenarios for Tasks 3â€?6 and propagates
 // their exit codes so this entry can never print "passed" without exercising
 // behaviour.
 //
@@ -292,6 +292,11 @@ const required = [
   "tests/task-12-context-compaction.test.ts",
   "tests/task-12-memory-security.test.ts",
   "tests/task-12-context-cancellation.test.ts",
+  "apps/desktop/src-tauri/src/sidecar.rs",
+  "tests/task-23-sidecar-integration.test.ts",
+  "tests/task-23-sidecar-security.test.ts",
+  "tests/task-23-sidecar-lifecycle.test.ts",
+  "tests/task-23-renderer-boundary.test.ts",
 ];
 
 for (const path of required) {
@@ -501,6 +506,13 @@ runScenario("task 22 runnable agent backend host composition", [
   "tests/task-22-runnable-host-integration.test.ts",
   "tests/task-22-runnable-host-security.test.ts",
   "tests/task-22-runnable-host-cancellation.test.ts",
+]);
+
+runScenario("task 23 tauri sidecar and loopback connection", [
+  "tests/task-23-sidecar-integration.test.ts",
+  "tests/task-23-sidecar-security.test.ts",
+  "tests/task-23-sidecar-lifecycle.test.ts",
+  "tests/task-23-renderer-boundary.test.ts",
 ]);
 console.log(
   [

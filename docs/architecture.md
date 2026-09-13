@@ -774,3 +774,30 @@ Backend 经 `createAgentBackendRunner()` 显式接入 Task 20 的 Loopback Host�
   不再一律 `completed`；端点、NDJSON、错误文案与并发约束不变。
 - 无第三方运行时依赖；生产源码无 fetch/node:http/node:fs/process.env/子进程。
 - Task 21 只完成 Node/TypeScript 组装；Tauri Rust 宿主与该 Backend 的跨进程连接属于后续任务。
+
+
+### Task 23（已完成：Tauri 与 Node Host 跨进程连接 MVP）
+
+新增 Rust `NodeHostSupervisor`：受控启动 Node Local Agent Host 子进程。
+
+```text
+Tauri Native Host
+  └─ NodeHostSupervisor (std::process::Command, 无 shell)
+       └─ Node Local Agent Host 子进程
+            └─ 仅监听 127.0.0.1
+                 └─ Local Agent API
+                      └─ Desktop UI / LocalAgentApiClient
+```
+
+边界：
+
+- 状态机：created → starting → running → stopping → stopped | failed
+- 启动成功前必须完成 Loopback 健康探活
+- `start()` / `stop()` 幂等；并发 start 不创建多个子进程
+- stop 有界等待；stdout/stderr 管道消费避免死锁
+- Drop 时自动 stop，避免孤儿进程
+- host 仅 `127.0.0.1`；port 1–65535；默认 4317
+- 错误消息固定，不回显路径/端口/命令/原始异常
+- Renderer 通过既有 `DesktopApiClient` 访问，不直接依赖 Provider/Credential/Backend
+- NotReady Host 的 turn 产生既有固定 `runner_error`，不伪造 `completed`
+- 详见 [Task 23 报告](verification/task-23-report.md)。

@@ -2,6 +2,7 @@ mod backend;
 mod commands;
 mod errors;
 mod runtime;
+mod sidecar;
 mod validation;
 
 pub fn run() {

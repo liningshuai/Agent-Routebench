@@ -14,6 +14,11 @@ pub const INVALID_TURN_ID: &str = "invalid_turn_id";
 pub const FORBIDDEN_FIELD: &str = "forbidden_field";
 #[allow(dead_code)]
 pub const INVALID_RESPONSE: &str = "invalid_response";
+pub const SIDECAR_START_FAILED: &str = "sidecar_start_failed";
+pub const SIDECAR_HEALTH_TIMEOUT: &str = "sidecar_health_timeout";
+pub const SIDECAR_NOT_READY: &str = "sidecar_not_ready";
+pub const SIDECAR_STOP_FAILED: &str = "sidecar_stop_failed";
+pub const INVALID_SIDECAR_OPTIONS: &str = "invalid_sidecar_options";
 
 /// A fixed, serializable host error. Only `code` and `message` are exposed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -61,6 +66,31 @@ impl HostError {
     #[allow(dead_code)]
     pub const fn invalid_response() -> Self {
         Self::new(INVALID_RESPONSE, "Agent host response is invalid.")
+    }
+
+    /// The Node sidecar failed to start.
+    pub const fn sidecar_start_failed() -> Self {
+        Self::new(SIDECAR_START_FAILED, "Sidecar failed to start.")
+    }
+
+    /// The Node sidecar did not become healthy in time.
+    pub const fn sidecar_health_timeout() -> Self {
+        Self::new(SIDECAR_HEALTH_TIMEOUT, "Sidecar health check timed out.")
+    }
+
+    /// The Node sidecar is not ready to accept requests.
+    pub const fn sidecar_not_ready() -> Self {
+        Self::new(SIDECAR_NOT_READY, "Sidecar is not ready.")
+    }
+
+    /// The Node sidecar failed to stop cleanly.
+    pub const fn sidecar_stop_failed() -> Self {
+        Self::new(SIDECAR_STOP_FAILED, "Sidecar failed to stop.")
+    }
+
+    /// The sidecar launch configuration is invalid.
+    pub const fn invalid_sidecar_options() -> Self {
+        Self::new(INVALID_SIDECAR_OPTIONS, "Sidecar options are invalid.")
     }
 }
 
