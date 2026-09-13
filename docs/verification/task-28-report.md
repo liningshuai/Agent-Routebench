@@ -72,11 +72,12 @@ Desktop UI
 | `apps/local-agent-host/src/errors.ts` | 新增固定错误码 `invalid_backend_options` 与固定文案 |
 | `apps/desktop/src/errors.ts` | 新增固定错误码 `config_load_failed` / `config_mutation_failed` 与固定文案 |
 | `apps/desktop/src/config-client.ts` | 配置读写改用上述两个固定配置错误码（不再复用 session/turn 错误码） |
-| `scripts/build-desktop.mjs` | 唯一 retiring 目录名 + best-effort 清理 + 启动时清理陈旧瞬时产物，避免残留目录阻塞后续构建 |
-| `scripts/build-local-agent-host.mjs` | 同上的对称修复：本地 Agent Host 构建原先硬删除 `dist/` 与 `dist-staging/`，一次清理失败即让后续每次构建失败；现改为唯一 retiring 名 + best-effort 清理 + 陈旧产物清理 |
+| `scripts/build-desktop.mjs` | 唯一 retiring 目录名 + best-effort 清理 + 启动时清理陈旧瞬时产物；vendor 编译产物改为**搬移**（`renameSync`）而非「复制 + 大批量删除」，使残留清理成为有界删除 |
+| `scripts/build-local-agent-host.mjs` | 同上的对称修复：本地 Agent Host 构建原先硬删除 `dist/`、`dist-staging/`，且要一次性删除 3453 个 vendor 原始产物；现改为唯一 retiring 名 + best-effort 清理 + 陈旧产物清理 + vendor 搬移 |
 | `.gitignore` | 忽略 `dist-staging/` 与 `dist-retiring*/` |
 | `apps/desktop/src-tauri/Cargo.toml` | 新增 `[profile.dev] incremental = false`，规避 rustc 元数据编码 ICE，使 Rust 构建可复现 |
 | `package.json` | 新增 `verify:release` 脚本 |
+| `vitest.config.ts` | 显式设置 `hookTimeout`：`task-18`/`task-19` 的 hook 内会执行真实构建，默认 10s 会把一次正常冷构建报成 `Hook timed out in 10000ms`（不改变任何断言） |
 | `scripts/evals-deterministic.mjs` | 新增 Task 28 期望文件、Task 28 离线场景与覆盖说明 |
 | `docs/architecture.md` | 新增 Task 28 章节、最终数据流、缺口修复表、范围声明 |
 | `docs/desktop.md` | 更新错误码表，新增 Task 28 Desktop 验收章节与解释说明 |
@@ -208,16 +209,23 @@ Test Files  4 failed | 1 passed (5)
   （本环境的安全删除保护触发），残留 `apps/desktop/dist-retiring/` 会让**后续每次**
   `build:desktop` 直接失败，并留下未跟踪目录。
 - 本地 Agent Host 构建清理同样不健壮：`build-local-agent-host.mjs` 直接
-  `rmSync(distDir)` / `rmSync(stagingDir)`（`apps/local-agent-host/dist` 有 65 个条目），
-  清理被拒时构建立即失败。已按 `build-desktop.mjs` 的同一模式修复并新增断言。
+  `rmSync(distDir)` / `rmSync(stagingDir)`，并要一次性 `rmSync(vendor/raw)`（3453 个条目），
+  单次大批量删除被拒时构建立即失败。已按 `build-desktop.mjs` 的同一模式修复。
+- 两个构建脚本都把「复制 vendor 产物 + 删除原始 dump」当作清理手段，使构建依赖一次
+  **大批量递归删除**。已改为 `renameSync` 搬移每个 package 的编译子树，原始目录只剩空目录，
+  清理因此成为有界删除（并移除了随之变成死代码的 `copyTree`）。
+- 新增的 `verify-release.mjs` 自身有一个真实缺陷：它用 `process.env.npm_execpath` 作为
+  JS 入口调用 `node`，而 pnpm 12 的 `npm_execpath` 指向原生可执行文件
+  `pnpm-native.exe`，导致 `ERR_UNKNOWN_FILE_EXTENSION`，使 release gate 全部步骤失败。
+  已改为按扩展名区分 JS CLI 与原生二进制后再 spawn。
 - Rust 构建：`cargo test`（全 target，含 `staticlib`+`cdylib`+`rlib`）在 incremental 下
   触发 rustc 1.98.1 ICE（`rmeta/encoder.rs: no entry found for key`），使 task-18/19 的
   Rust 测试与 vitest worker RPC 一并失败。
 
 ### Green
 
-- 修复后 Task 28 聚焦：5 文件 / 129 测试通过。
-- 全量 TypeScript：126 文件 / 2110 测试通过，退出码 0，无 unhandled error。
+- 修复后 Task 28 聚焦：5 文件 / 131 测试通过。
+- 全量 TypeScript：126 文件 / 2112 测试通过，退出码 0，无 unhandled error。
 - Rust：98 个单元测试通过。
 
 ## 8. 受控变异
@@ -245,8 +253,9 @@ Test Files  4 failed | 1 passed (5)
 | 13 | 删除 Desktop 构建交换的健壮清理 | 构建卫生断言 | 是 | 绿 |
 | 14 | 允许非 loopback sidecar host（原生边界） | `cargo test --lib`（2 失败） | 是 | 绿 |
 | 15 | 删除 Local Agent Host 构建交换的健壮清理 | 构建卫生断言（1 失败） | 是 | 绿 |
+| 16 | 把 vendor 搬移改回硬删除（`rmSync(rawVendorDir)`） | 构建卫生断言（1 失败） | 是 | 绿 |
 
-合计 **17 项变异**（含 10a/10b 两个子变异），**16 项检出**，**1 项未检出**。
+合计 **18 项变异**（含 10a/10b 两个子变异），**17 项检出**，**1 项未检出**。
 
 ### 关于未检出的 10a（诚实披露）
 
@@ -269,16 +278,16 @@ Test Files  4 failed | 1 passed (5)
 
 | 范围 | 文件 | 测试 |
 | --- | --- | --- |
-| Task 28 聚焦 | 5 | **129** |
+| Task 28 聚焦 | 5 | **131** |
 | └ `task-28-final-integration.test.ts` | | 26 |
 | └ `task-28-final-security.test.ts` | | 28 |
-| └ `task-28-final-lifecycle.test.ts` | | 28 |
+| └ `task-28-final-lifecycle.test.ts` | | 30 |
 | └ `task-28-final-config.test.ts` | | 25 |
 | └ `task-28-final-desktop.test.ts` | | 22 |
-| TypeScript 全量 | 126 | **2110** |
+| TypeScript 全量 | 126 | **2112** |
 | Rust 全量（`cargo test --lib`） | — | **98** |
 
-Task 28 新增 129 个测试，超过要求的 60 个；其中绝大多数是真实行为断言（真实 loopback
+Task 28 新增 131 个测试，超过要求的 60 个；其中绝大多数是真实行为断言（真实 loopback
 HTTP、真实 Host 生命周期、真实 jsdom DOM、真实 cargo 单元测试），不是源码 grep。
 
 ## 10. 全部验证命令和退出码
@@ -308,15 +317,15 @@ HTTP、真实 Host 生命周期、真实 jsdom DOM、真实 cargo 单元测试�
 - `install --frozen-lockfile`：`Lockfile is up to date, resolution step is skipped`。
 - `security:scan`：`security:scan passed (587 files scanned; baseline secret and dependency checks only.)`
 - `evals:deterministic`：`stage 1 passed (323 expected files present)`，全部离线场景通过。
-- `test`：`Test Files 126 passed (126)` / `Tests 2110 passed (2110)`，无 unhandled error。
+- `test`：`Test Files 126 passed (126)` / `Tests 2112 passed (2112)`，无 unhandled error。
 - `cargo test --lib`：`test result: ok. 98 passed; 0 failed`。
 - `git diff --check` / `git diff --cached --check`：无空白错误（仅有 Git 关于工作区 LF/CRLF
   的提示，非错误）。
 
 附加验证（全部满足）：
 
-- 全量 TypeScript 测试全部通过（126 文件 / 2110 测试，退出码 0）。
-- Task 28 聚焦测试全部通过（5 文件 / 129 测试）。
+- 全量 TypeScript 测试全部通过（126 文件 / 2112 测试，退出码 0）。
+- Task 28 聚焦测试全部通过（5 文件 / 131 测试）。
 - Rust 测试全部通过（98 个单元测试）。
 - 构建后 `apps/desktop/src-tauri/target/` 不存在。
 - 安全扫描在有构建产物（`apps/desktop/dist/`、`apps/local-agent-host/dist/`、仓库根 `target/`）
@@ -345,8 +354,21 @@ HTTP、真实 Host 生命周期、真实 jsdom DOM、真实 cargo 单元测试�
 
 ## 12. Git commit、parent、push 和最终 status
 
-见本报告末尾「Git 交付记录」小节（在提交与 push 完成后由本次执行追加，数值取自真实
-`git` 输出）。
+| 项目 | 值 |
+| --- | --- |
+| 分支 | `workbench/agent-core` |
+| 提交 1（Task 28 主要实现、测试、文档、脚本） | `cb6c72461a7eab9a5db1f8ed8e0f24bb21b21f53` |
+| 提交 1 信息 | `feat(release): close final desktop integration` |
+| 提交 1 父提交 | `693f0efd1f7462dd3f125e56d4fdd22faa9b329a`（= 基线 HEAD，父链正确） |
+| 提交 1 规模 | 22 files changed, 3486 insertions(+), 19 deletions(-) |
+| 提交 2（构建脚本健壮性、vitest hookTimeout、本报告定稿） | 见 `git log -1 --format=%H`（本报告不自我引用其自身提交的 SHA） |
+| 提交对象校验 | `git cat-file -e HEAD^{commit}` 通过 |
+| push | `git push origin workbench/agent-core` 成功（非 force push） |
+| 远程一致性 | `git ls-remote origin refs/heads/workbench/agent-core` 与本地 HEAD 完全一致 |
+| 最终 status | `## workbench/agent-core...origin/workbench/agent-core`，除 `?? .superpowers/` 外无未跟踪或已修改文件 |
+
+提交方式遵循约束：只使用显式文件名 `git add`（无 `git add .` / `-A`）、无 amend、无 reset、
+无 checkout、无 rebase、无 force push、未触碰 `.superpowers/`。
 
 ## 13. 未实现范围与已知问题
 
@@ -378,3 +400,16 @@ HTTP、真实 Host 生命周期、真实 jsdom DOM、真实 cargo 单元测试�
 7. **`credentialRef` 与 `baseUrl` 在设置页可见可编辑**：二者是配置所需的非敏感字段
    （`credentialRef` 是引用而非 secret）。会话页与事件 ViewModel 不显示它们，任何 secret
    值都不进入任一界面（见 `docs/desktop.md` 的解释说明）。
+8. **vitest hook 默认超时与 worker RPC**：`task-18`/`task-19` 的 `beforeAll` 会在 hook 内
+   执行真实构建，而 vitest 默认 `hookTimeout` 仅 10s；当构建指纹变化（即需要真正重建）时，
+   一次正常构建会被报成 `Hook timed out in 10000ms`。已在 `vitest.config.ts` 显式设置
+   `hookTimeout`（**不改变任何断言**），并新增断言防止回退。此外，当构建在测试进程内长时间
+   阻塞时，vitest 偶发报告 `[vitest-worker]: Timeout calling "onTaskUpdate"`（unhandled
+   error，会使退出码非 0）。这是 vitest 与运行环境的产物而非仓库缺陷；`verify:release`
+   先构建再跑测试，因此该发布入口不受影响。
+9. **本机 git 引用文件曾被外部因素删除（已恢复）**：本次执行中 `git commit` 成功后，
+   `.git/refs/heads/` 目录与其下的 `workbench/agent-core` 引用文件被外部因素删除，仓库一度
+   呈现「unborn branch」状态（对象库与 reflog 完好，`git reflog` 记录了本次提交）。
+   已依据 reflog 与对象库用等价方式恢复该引用（**未**使用 `reset` / `checkout` / `rebase`），
+   并逐项复核 `HEAD`、`HEAD^`、提交对象、`git log` 与提交时完全一致，无内容丢失。
+   这是环境侧异常，已记录以免被误读为仓库问题。

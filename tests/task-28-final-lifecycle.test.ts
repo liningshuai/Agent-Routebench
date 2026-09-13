@@ -358,6 +358,26 @@ describe("Task 28 final lifecycle: build output hygiene", () => {
     expect(script).not.toMatch(/^\s*rmSync\(distDir/m);
   });
 
+  it("relocates vendor output instead of copying then bulk-deleting it", () => {
+    const desktop = readRepoFile("scripts/build-desktop.mjs");
+    const host = readRepoFile("scripts/build-local-agent-host.mjs");
+    // A single multi-entry tsc run dumps the compiled packages into a raw
+    // directory; each package subtree is *moved* into place so the leftover
+    // cleanup stays a bounded delete rather than one large recursive removal.
+    expect(desktop).toContain("renameSync(from, to)");
+    expect(desktop).toContain("removeQuietly(rawOut)");
+    expect(desktop).not.toContain("copyTree");
+    expect(host).toContain("renameSync(source, target)");
+    expect(host).toContain("removeQuietly(rawVendorDir)");
+    expect(host).not.toContain("copyTree");
+    for (const [name, script] of [
+      ["build-desktop", desktop],
+      ["build-local-agent-host", host],
+    ] as const) {
+      expect(script, name).not.toMatch(/rmSync\(raw(Out|VendorDir)/);
+    }
+  });
+
   it("cleans only the build's own transient directories", () => {
     const script = readRepoFile("scripts/build-desktop.mjs");
     const cleanup = script.slice(script.indexOf("function cleanupStaleOutputs("));
@@ -365,6 +385,12 @@ describe("Task 28 final lifecycle: build output hygiene", () => {
     expect(body).toContain('entry === "dist-staging"');
     expect(body).toContain('entry.startsWith("dist-retiring")');
     expect(body).not.toContain('"dist"');
+  });
+
+  it("gives build hooks room to finish instead of cutting them off", () => {
+    const config = readRepoFile("vitest.config.ts");
+    // A cold Desktop/Rust build inside a hook far exceeds vitest's 10s default.
+    expect(config).toMatch(/hookTimeout:\s*20\s*\*\s*60\s*\*\s*1000/);
   });
 
   it("keeps no transient build directory in the working tree", () => {

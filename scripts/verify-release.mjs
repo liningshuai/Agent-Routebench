@@ -22,9 +22,27 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const pnpmCli = process.env.npm_execpath;
 
 let failed = 0;
+
+/**
+ * Resolves how to re-invoke pnpm from inside a pnpm script.
+ *
+ * `npm_execpath` may point either at a JavaScript CLI (older pnpm / corepack
+ * shim) or at a native executable (`pnpm-native.exe`). Passing a native binary
+ * to `node` fails with ERR_UNKNOWN_FILE_EXTENSION, so the two shapes are
+ * distinguished before spawning.
+ */
+function resolvePnpm() {
+  const execpath = process.env.npm_execpath;
+  if (typeof execpath === "string" && execpath.length > 0) {
+    if (/\.(c?js|mjs)$/i.test(execpath)) {
+      return { executable: process.execPath, prefix: [execpath] };
+    }
+    return { executable: execpath, prefix: [] };
+  }
+  return { executable: "pnpm", prefix: [] };
+}
 
 function report(label, result) {
   const status = result.status === 0 ? "ok  " : "FAIL";
@@ -35,12 +53,10 @@ function report(label, result) {
 }
 
 function runPnpm(label, args) {
-  const command = pnpmCli
-    ? { executable: process.execPath, args: [pnpmCli, ...args] }
-    : { executable: "pnpm", args };
+  const { executable, prefix } = resolvePnpm();
   report(
     label,
-    spawnSync(command.executable, command.args, { cwd: root, stdio: "inherit" }),
+    spawnSync(executable, [...prefix, ...args], { cwd: root, stdio: "inherit" }),
   );
 }
 

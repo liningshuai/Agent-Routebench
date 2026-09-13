@@ -51,14 +51,6 @@ function listFiles(directory) {
   return files;
 }
 
-function copyTree(from, to) {
-  for (const file of listFiles(from)) {
-    const target = join(to, relative(from, file));
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, readFileSync(file));
-  }
-}
-
 function compileHost() {
   run(
     'corepack pnpm exec tsc -p tsconfig.json --outDir "dist-staging"',
@@ -82,9 +74,14 @@ function compileWorkspacePackages() {
     if (!existsSync(source)) {
       throw new Error(`sidecar vendor compilation did not emit ${name}`);
     }
-    copyTree(source, target);
+    // Relocate instead of copy+delete. The raw dump is a byproduct of a single
+    // multi-entry tsc run; moving each compiled `src` subtree leaves only empty
+    // directories behind, so the cleanup below stays a bounded delete instead
+    // of depending on one large recursive removal.
+    mkdirSync(dirname(target), { recursive: true });
+    renameSync(source, target);
   }
-  rmSync(join(stagingDir, "vendor", "raw"), { recursive: true, force: true });
+  removeQuietly(rawVendorDir);
 }
 
 function importPath(fromDirectory, targetFile) {

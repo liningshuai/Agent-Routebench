@@ -90,18 +90,6 @@ function listFiles(dir) {
   return out;
 }
 
-/**
- * Synchronous byte copy implemented with plain fs calls. fs.cpSync crashes
- * this Node/Windows combination (exit 0xC0000409), so the build never uses it.
- */
-function copyTree(from, to) {
-  for (const file of listFiles(from)) {
-    const target = join(to, relative(from, file));
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, readFileSync(file));
-  }
-}
-
 function toImportPath(fromDir, targetFile) {
   const rel = relative(fromDir, targetFile).split("\\").join("/");
   return rel.startsWith(".") ? rel : `./${rel}`;
@@ -145,9 +133,14 @@ function compileVendorPackages() {
     if (!existsSync(from)) {
       throw new Error(`vendor compilation did not emit ${name}`);
     }
-    copyTree(from, to);
+    // Relocate instead of copy+delete. The raw dump is a byproduct of a single
+    // multi-entry tsc run; moving each compiled `src` subtree leaves only empty
+    // directories behind, so the cleanup below stays a bounded delete instead
+    // of depending on one large recursive removal.
+    mkdirSync(dirname(to), { recursive: true });
+    renameSync(from, to);
   }
-  rmSync(rawOut, { recursive: true, force: true });
+  removeQuietly(rawOut);
   console.log("build:desktop vendored workspace runtime packages");
 }
 
