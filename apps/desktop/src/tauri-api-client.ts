@@ -23,6 +23,9 @@ export const TAURI_COMMANDS = Object.freeze({
   createRoute: "agent_create_route",
   updateRoute: "agent_update_route",
   deleteRoute: "agent_delete_route",
+  setCredential: "agent_set_credential",
+  hasCredential: "agent_has_credential",
+  deleteCredential: "agent_delete_credential",
 } as const);
 
 export const TAURI_EVENTS = Object.freeze({
@@ -388,20 +391,24 @@ export class TauriDesktopApiClient implements DesktopApiClient {
     let released = false;
     let release: ((candidate: TauriUnlisten) => void) | undefined;
     let activeTurnId = "";
+    const pending: TauriEvent<TauriTurnEventPayload>[] = [];
+    let acceptEvent: ((envelope: TauriEvent<TauriTurnEventPayload>) => void) | undefined;
 
     try {
       throwIfAborted(signal);
       assertNonEmptyString(sessionId);
       assertSafeTurnRequest(request);
 
-      let listenPromise: Promise<TauriUnlisten>;
-      try {
-        listenPromise = Promise.resolve(this.#listen<TauriTurnEventPayload>(
-          TAURI_EVENTS.turnEvent,
-          (envelope) => {
+      acceptEvent = (envelope) => {
             try {
               if (!isRecord(envelope.payload)) {
                 queue.fail(createDesktopError("TURN_FAILED"));
+                return;
+              }
+              if (envelope.payload.sessionId !== sessionId) return;
+              if (!activeTurnId) {
+                if (pending.length >= 256) { queue.fail(createDesktopError("TURN_FAILED")); return; }
+                pending.push(envelope);
                 return;
               }
               if (
@@ -429,8 +436,10 @@ export class TauriDesktopApiClient implements DesktopApiClient {
             } catch {
               queue.fail(createDesktopError("TURN_FAILED"));
             }
-          },
-        ));
+          };
+      let listenPromise: Promise<TauriUnlisten>;
+      try {
+        listenPromise = Promise.resolve(this.#listen<TauriTurnEventPayload>(TAURI_EVENTS.turnEvent, acceptEvent));
       } catch {
         throw createDesktopError("TURN_FAILED");
       }
@@ -467,6 +476,7 @@ export class TauriDesktopApiClient implements DesktopApiClient {
       }
       try {
         activeTurnId = await raceAbort(startPromise, signal).then(parseTurnId);
+        for (const envelope of pending.splice(0)) acceptEvent(envelope);
       } catch (error) {
         if (isAbortFailure(error)) throw new Error("Request aborted.");
         throw error;

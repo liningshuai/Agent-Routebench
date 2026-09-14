@@ -19,6 +19,21 @@ use crate::errors::HostError;
 use crate::runtime::HostRuntime;
 use crate::validation;
 
+#[tauri::command]
+pub fn agent_set_credential(credential_ref: String, secret: String) -> Result<(), &'static str> {
+    crate::credentials::set(&credential_ref, &secret)
+}
+
+#[tauri::command]
+pub fn agent_has_credential(credential_ref: String) -> Result<bool, &'static str> {
+    crate::credentials::has(&credential_ref)
+}
+
+#[tauri::command]
+pub fn agent_delete_credential(credential_ref: String) -> Result<(), &'static str> {
+    crate::credentials::delete(&credential_ref)
+}
+
 /// Reserved streaming event name. The contract is fixed so the Desktop
 /// renderer bridge stays stable; the MVP host never publishes this event.
 /// The Task 21 backend assembly will emit it; until then it is deliberately

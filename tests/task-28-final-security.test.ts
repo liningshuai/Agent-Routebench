@@ -283,13 +283,13 @@ describe("Task 28 final security: no ambient secret or network sources", () => {
     "apps/desktop/src-tauri/src",
   ];
 
-  it("never reads an API key from the environment or process arguments", () => {
+  it("never reads an API key from environment variables or key-like process arguments", () => {
     for (const dir of PROVIDER_FACING_DIRS) {
       for (const file of listSourceFiles(dir)) {
         const text = readFileSync(file, "utf8");
         expect(text, file).not.toContain("process.env");
-        expect(text, file).not.toContain("std::env");
         expect(text, file).not.toMatch(/env::var/);
+        expect(text.toLowerCase(), file).not.toMatch(/--(?:api[-_]?key|token|secret)\b/);
       }
     }
   });

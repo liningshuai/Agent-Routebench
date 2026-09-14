@@ -59,10 +59,23 @@ pub struct SidecarLaunchConfig {
     pub host: String,
     pub port: u16,
     pub config_path: Option<String>,
+    pub credential_helper: Option<String>,
     pub create_config_if_missing: bool,
 }
 
 impl SidecarLaunchConfig {
+    /// Trusted native host executable, not a renderer/config supplied path.
+    pub fn with_credential_helper(mut self, path: impl Into<String>) -> Result<Self, HostError> {
+        let path = normalize_node_script_path(path.into());
+        if !Path::new(&path).is_absolute()
+            || path.contains('\0')
+            || !path.to_ascii_lowercase().ends_with(".exe")
+        {
+            return Err(HostError::invalid_sidecar_options());
+        }
+        self.credential_helper = Some(path);
+        Ok(self)
+    }
     /// Builds a validated launch config. Rejects empty paths, non-loopback
     /// hosts, out-of-range ports and unknown field shapes. Messages are fixed
     /// and never echo the rejected value.
@@ -98,6 +111,7 @@ impl SidecarLaunchConfig {
             host,
             port,
             config_path: None,
+            credential_helper: None,
             create_config_if_missing: false,
         })
     }
@@ -146,33 +160,53 @@ pub struct StdProcessLauncher;
 
 impl ProcessLauncher for StdProcessLauncher {
     fn spawn(&self, config: &SidecarLaunchConfig) -> Result<Box<dyn ChildProcess>, HostError> {
-        // Never use cmd /c, powershell, bash or sh.
-        let mut command = Command::new(&config.executable);
-        command
-            .arg(&config.script_path)
-            .arg("--host")
-            .arg(&config.host)
-            .arg("--port")
-            .arg(config.port.to_string());
-        if let Some(path) = &config.config_path {
-            command.arg("--config").arg(path);
-            if config.create_config_if_missing {
-                command.arg("--create-if-missing");
-            }
-        }
-        command
-            .stdin(Stdio::null())
-            // The sidecar has no log consumer in the native host. Discarding
-            // both streams prevents a child that logs heavily from blocking
-            // on a full pipe while the supervisor is waiting for health.
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-
+        let mut command = sidecar_command(config)?;
         let child = command
             .spawn()
             .map_err(|_| HostError::sidecar_start_failed())?;
         Ok(Box::new(StdChildProcess { child }))
     }
+}
+
+fn sidecar_command(config: &SidecarLaunchConfig) -> Result<Command, HostError> {
+    // Revalidate the public field at the process boundary as well.
+    if let Some(path) = &config.credential_helper {
+        config.clone().with_credential_helper(path.clone())?;
+        if config.config_path.is_none() {
+            return Err(HostError::invalid_sidecar_options());
+        }
+    }
+    // Never use cmd /c, powershell, bash or sh.
+    let mut command = Command::new(&config.executable);
+    command
+        .arg(&config.script_path)
+        .arg("--host")
+        .arg(&config.host)
+        .arg("--port")
+        .arg(config.port.to_string());
+    if let Some(path) = &config.config_path {
+        command.arg("--config").arg(path);
+        if config.create_config_if_missing {
+            command.arg("--create-if-missing");
+        }
+    }
+    if let Some(path) = &config.credential_helper {
+        command.arg("--credential-helper").arg(path);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    command
+        .stdin(Stdio::null())
+        // The sidecar has no log consumer in the native host. Discarding
+        // both streams prevents a child that logs heavily from blocking
+        // on a full pipe while the supervisor is waiting for health.
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    Ok(command)
 }
 
 struct StdChildProcess {
@@ -566,6 +600,26 @@ mod tests {
     fn config_accepts_loopback_and_safe_port() {
         let config = SidecarLaunchConfig::new("node", "/app/main.js", "127.0.0.1", 4317);
         assert!(config.is_ok());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn credential_helper_is_validated_and_forwarded_to_node() {
+        let config = valid_config()
+            .with_config_path(r"C:\agent-routebench\config.json")
+            .expect("config path")
+            .with_credential_helper(r"C:\agent-routebench\agent-routebench.exe")
+            .expect("helper path");
+        let command = sidecar_command(&config).expect("command");
+        let args: Vec<String> = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert!(args.windows(2).any(|pair| pair
+            == [
+                "--credential-helper",
+                r"C:\agent-routebench\agent-routebench.exe"
+            ]));
     }
 
     #[test]

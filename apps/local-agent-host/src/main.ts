@@ -5,8 +5,10 @@ import type { LocalAgentHostMainOptions } from "./types.js";
 import { validateHostOptions } from "./validation.js";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { WindowsCredentialSource } from "./credential-source.js";
 
 interface ParsedArguments {
+  readonly credentialHelper?: string;
   readonly host?: "127.0.0.1" | "localhost";
   readonly port: number;
   readonly configFilePath?: string;
@@ -26,9 +28,13 @@ function parseArguments(argv: readonly string[]): ParsedArguments {
   let sawHost = false;
   let sawPort = false;
   let sawConfig = false;
+  let credentialHelper: string | undefined;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === "--host") {
+    if (argument === "--credential-helper") {
+      if (credentialHelper !== undefined || !argv[index + 1] || argv[index + 1]!.startsWith("--")) throw new LocalAgentHostError("invalid_options");
+      credentialHelper = argv[++index];
+    } else if (argument === "--host") {
       if (sawHost) throw new LocalAgentHostError("invalid_options");
       if (index + 1 >= argv.length || argv[index + 1]?.startsWith("--")) {
         throw new LocalAgentHostError("invalid_options");
@@ -66,9 +72,11 @@ function parseArguments(argv: readonly string[]): ParsedArguments {
     throw new LocalAgentHostError("invalid_options");
   }
   const port = Number(rawPort);
+  if (credentialHelper !== undefined && configFilePath === undefined) throw new LocalAgentHostError("invalid_options");
   const parsed: ParsedArguments = {
     port,
     createIfMissing,
+    ...(credentialHelper === undefined ? {} : { credentialHelper }),
     ...(host === undefined ? {} : { host: host as "127.0.0.1" | "localhost" }),
     ...(configFilePath === undefined ? {} : { configFilePath }),
   };
@@ -104,6 +112,7 @@ export async function runLocalAgentHostMain(
           port: parsed.port,
           configFilePath: parsed.configFilePath,
           createIfMissing: parsed.createIfMissing,
+          ...(parsed.credentialHelper === undefined ? {} : { credentials: new WindowsCredentialSource(parsed.credentialHelper) }),
         });
     // Configured bootstrap starts its host after the file has been validated;
     // the plain host still needs to be started here.

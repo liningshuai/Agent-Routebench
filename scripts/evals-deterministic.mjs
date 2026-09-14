@@ -199,6 +199,7 @@ const required = [
   "docs/verification/task-17-report.md",
   "docs/verification/task-18-report.md",
   "apps/desktop/src/tauri-entry.ts",
+  "apps/desktop/src/credential-client.ts",
   "apps/desktop/src-tauri/Cargo.toml",
   "apps/desktop/src-tauri/Cargo.lock",
   "apps/desktop/src-tauri/build.rs",
@@ -211,6 +212,9 @@ const required = [
   "apps/desktop/src-tauri/src/validation.rs",
   "apps/desktop/src-tauri/src/backend.rs",
   "apps/desktop/src-tauri/src/runtime.rs",
+  "apps/desktop/src-tauri/src/credentials.rs",
+  "apps/desktop/src-tauri/tests/credential-sidecar.rs",
+  "apps/desktop/src-tauri/tests/credentials.rs",
   ".cargo/config.toml",
   "apps/local-agent-host/package.json",
   "apps/local-agent-host/tsconfig.json",
@@ -219,6 +223,7 @@ const required = [
   "apps/local-agent-host/src/validation.ts",
   "apps/local-agent-host/src/host.ts",
   "apps/local-agent-host/src/main.ts",
+  "apps/local-agent-host/src/credential-source.ts",
   "apps/local-agent-host/src/index.ts",
   "apps/local-agent-host/src/configured-host.ts",
   "tests/helpers/local-agent-host-fixtures.ts",
@@ -342,6 +347,13 @@ const required = [
   "tests/helpers/task-28-fixtures.ts",
   "docs/verification/task-28-report.md",
   "scripts/verify-release.mjs",
+  "scripts/package-desktop.mjs",
+  "scripts/package-desktop.test.mjs",
+  "docs/desktop-credentials.md",
+  "docs/portable-desktop.md",
+  "tests/desktop-product.test.ts",
+  "tests/desktop-credentials.test.ts",
+  "tests/desktop-credential-source-process.test.ts",
 ];
 
 for (const path of required) {
@@ -380,6 +392,19 @@ function runScenario(label, files) {
     process.exit(1);
   }
 
+  console.log(`evals:deterministic stage 2 scenario passed (${label}).`);
+}
+
+function runNodeScenario(label, file) {
+  const result = spawnSync(process.execPath, [file], { cwd: root, stdio: "inherit" });
+  if (result.error !== undefined && result.error !== null) {
+    console.error(`evals:deterministic failed (${label}): ${result.error.message}`);
+    process.exit(1);
+  }
+  if (result.status !== 0) {
+    console.error(`evals:deterministic failed (${label}): the Node scenario exited with code ${String(result.status)}.`);
+    process.exit(1);
+  }
   console.log(`evals:deterministic stage 2 scenario passed (${label}).`);
 }
 
@@ -602,7 +627,11 @@ runScenario("task 28 final integration and release readiness", [
   "tests/task-28-final-lifecycle.test.ts",
   "tests/task-28-final-config.test.ts",
   "tests/task-28-final-desktop.test.ts",
+  "tests/desktop-product.test.ts",
+  "tests/desktop-credentials.test.ts",
+  "tests/desktop-credential-source-process.test.ts",
 ]);
+runNodeScenario("portable desktop package contract", "scripts/package-desktop.test.mjs");
 console.log(
   [
     "evals:deterministic passed.",

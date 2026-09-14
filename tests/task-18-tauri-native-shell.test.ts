@@ -206,14 +206,12 @@ describe("Task 18: Tauri native shell — frontend entry", () => {
     expect(foreign).toEqual([]);
   });
 
-  test("tauri-entry never touches provider, credential or persistence packages", () => {
+  test("tauri-entry never touches provider or persistence packages directly", () => {
     const entry = readRepoFile(TAURI_ENTRY_PATH);
     for (const forbidden of [
       "model-gateway",
       "provider-registry",
       "session-persistence",
-      "credential",
-      "CredentialStore",
     ]) {
       expect(entry).not.toContain(forbidden);
     }

@@ -1,5 +1,6 @@
 mod backend;
 mod commands;
+mod credentials;
 mod errors;
 mod proxy;
 mod runtime;
@@ -37,15 +38,38 @@ fn create_sidecar_supervisor(
         )
         .map_err(|_| Box::new(crate::errors::HostError::invalid_sidecar_options()))?;
     }
+    // Windows portable resources live beside the application executable.
+    // Release builds must never execute an arbitrary Node from PATH.
+    let bundled_node = resource_dir.join(if cfg!(windows) { "node.exe" } else { "node" });
+    let node_executable = if bundled_node.is_file() {
+        bundled_node
+            .canonicalize()
+            .map_err(|_| {
+                Box::new(crate::errors::HostError::sidecar_start_failed())
+                    as Box<dyn std::error::Error>
+            })?
+            .to_string_lossy()
+            .into_owned()
+    } else if cfg!(debug_assertions) {
+        "node".to_owned()
+    } else {
+        return Err(Box::new(crate::errors::HostError::sidecar_start_failed()));
+    };
     let config = SidecarLaunchConfig::new(
-        "node",
+        node_executable,
         script_path.to_string_lossy().into_owned(),
         SIDECAR_LOOPBACK_HOST,
         SIDECAR_DEFAULT_PORT,
     )
     .and_then(|config| config.with_config_path(config_path.to_string_lossy().into_owned()))
-    .map(|config| config.with_create_config_if_missing(true))
-    .map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
+    .map(|config| config.with_create_config_if_missing(true));
+    #[cfg(windows)]
+    let config = config.and_then(|config| {
+        let helper = std::env::current_exe()
+            .map_err(|_| crate::errors::HostError::invalid_sidecar_options())?;
+        config.with_credential_helper(helper.to_string_lossy().into_owned())
+    });
+    let config = config.map_err(|error| Box::new(error) as Box<dyn std::error::Error>)?;
     let supervisor = NodeHostSupervisor::new(config);
     supervisor
         .start()
@@ -81,6 +105,9 @@ pub fn run() {
             commands::agent_create_route,
             commands::agent_update_route,
             commands::agent_delete_route,
+            commands::agent_set_credential,
+            commands::agent_has_credential,
+            commands::agent_delete_credential,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the tauri host")

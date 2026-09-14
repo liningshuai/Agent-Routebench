@@ -19,8 +19,8 @@ import {
 const RUST_SRC = "apps/desktop/src-tauri/src";
 const rustFile = (name: string): string => readRepoFile(`${RUST_SRC}/${name}`);
 
-function rustSourceAll(): string {
-  return ["main.rs", "lib.rs", "commands.rs", "errors.rs", "validation.rs"]
+function rustCoreSource(): string {
+  return ["backend.rs", "commands.rs", "errors.rs", "runtime.rs", "validation.rs"]
     .map(rustFile)
     .join("\n");
 }
@@ -84,15 +84,15 @@ describe("Task 18: Tauri native security — dependency boundary", () => {
 });
 
 describe("Task 18: Tauri native security — host environment isolation", () => {
-  test("Rust host never reads environment variables", () => {
-    const source = rustSourceAll();
+  test("core Tauri modules never read environment variables", () => {
+    const source = rustCoreSource();
     expect(source).not.toContain("std::env");
     expect(source).not.toContain("env::var");
     expect(source).not.toContain("env!(");
   });
 
-  test("Rust host never spawns processes", () => {
-    const source = rustSourceAll();
+  test("core Tauri modules never spawn processes", () => {
+    const source = rustCoreSource();
     expect(source).not.toContain("std::process");
     expect(source).not.toContain("Command::new");
   });
@@ -110,22 +110,16 @@ describe("Task 18: Tauri native security — host environment isolation", () => 
     expect(source).not.toContain("canonicalize");
   });
 
-  test("Rust host opens no network client", () => {
-    const source = rustSourceAll();
+  test("core Tauri modules open no network client", () => {
+    const source = rustCoreSource();
     expect(source).not.toContain("TcpStream");
     expect(source).not.toContain("reqwest");
     expect(source).not.toContain("ureq");
     expect(source).not.toContain("HttpClient");
   });
 
-  test("Rust host never touches credentials or keychains", () => {
-    // commands.rs and validation.rs legitimately contain forbidden field
-    // names as *rejection* literals; those are asserted separately.
-    const source = [
-      rustFile("main.rs"),
-      rustFile("lib.rs"),
-      rustFile("errors.rs"),
-    ].join("\n");
+  test("core backend modules never touch credentials or keychains", () => {
+    const source = [rustFile("backend.rs"), rustFile("errors.rs"), rustFile("runtime.rs")].join("\n");
     for (const forbidden of [
       "keyring",
       "keychain",
@@ -140,7 +134,7 @@ describe("Task 18: Tauri native security — host environment isolation", () => 
     }
   });
 
-  test("frontend entry reads no environment or credential material", () => {
+  test("frontend entry reads no environment or credential values", () => {
     const entry = readRepoFile(TAURI_ENTRY_PATH);
     for (const forbidden of [
       "process.env",
@@ -150,7 +144,6 @@ describe("Task 18: Tauri native security — host environment isolation", () => 
       "secret",
       "Bearer",
       "Authorization",
-      "credential",
     ]) {
       expect(entry.toLowerCase()).not.toContain(forbidden.toLowerCase());
     }

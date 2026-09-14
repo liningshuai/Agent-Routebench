@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { createTauriDesktopApiClient } from "./tauri-api-client.js";
 import { createDesktopConfigClient } from "./config-client.js";
+import { createDesktopCredentialClient } from "./credential-client.js";
 import { mountDesktopUi } from "./ui.js";
 
 /**
@@ -20,7 +21,8 @@ export function bootstrapTauriDesktopUi(doc: Document): void {
   }
   const client = createTauriDesktopApiClient({ invoke, listen });
   const configClient = createDesktopConfigClient({ invoke, listen });
-  mountDesktopUi(container, client, configClient);
+  const credentialClient = createDesktopCredentialClient({ invoke });
+  mountDesktopUi(container, client, configClient, credentialClient);
 }
 
 if (typeof document !== "undefined") {

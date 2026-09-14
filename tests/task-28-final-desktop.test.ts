@@ -120,7 +120,8 @@ describe("Task 28 final Desktop: session surface", () => {
     await flush();
 
     expect(container.querySelectorAll(".session-item").length).toBe(1);
-    expect(container.querySelector(".session-item")?.textContent).toBe("sess_1");
+    expect(container.querySelector(".session-item")?.getAttribute("data-session-id")).toBe("sess_1");
+    expect(container.querySelector(".session-title")?.textContent).toBe("新对话");
   });
 
   it("disables Send while the draft is empty and enables it afterwards", async () => {

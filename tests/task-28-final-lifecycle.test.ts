@@ -313,7 +313,8 @@ describe("Task 28 final lifecycle: renderer boundary", () => {
     const entry = readRepoFile("apps/desktop/src/tauri-entry.ts");
     expect(entry).toContain("createDesktopConfigClient");
     expect(entry).toContain("const configClient =");
-    expect(entry).toContain("mountDesktopUi(container, client, configClient)");
+    expect(entry).toContain("createDesktopCredentialClient");
+    expect(entry).toContain("mountDesktopUi(container, client, configClient, credentialClient)");
     // The renderer reaches configuration only through the injected client.
     expect(entry).not.toContain("fetch(");
     expect(entry).not.toContain("createLocalAgentApiServer");

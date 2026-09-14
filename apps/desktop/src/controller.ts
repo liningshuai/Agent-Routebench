@@ -92,6 +92,9 @@ export class DesktopController {
       this.setState({
         sessions: [...this.state.sessions, session],
         activeSessionId: session.id,
+        events: [],
+        draft: "",
+        error: null,
       });
     } catch (_err: unknown) {
       this.setState({ error: "Failed to create session." });
@@ -116,7 +119,7 @@ export class DesktopController {
     
     // Clear draft and set submitting state
     const draftText = this.state.draft;
-    this.setState({ isSubmitting: true, draft: "" });
+    this.setState({ isSubmitting: true, draft: "", error: null, events: [] });
 
     try {
       const events = this.apiClient.submitTurn(
@@ -131,7 +134,9 @@ export class DesktopController {
         }
         this.setState({
           events: [...this.state.events, event],
+          ...(event.type === "error" ? { error: event.code === "aborted" ? "Request aborted." : "Model request failed. Check your route and credentials.", draft: draftText } : {}),
         });
+        if (event.type === "error" || event.type === "completed") break;
       }
       
       // Check abort after iteration completes

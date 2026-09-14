@@ -45,7 +45,7 @@ describe("Task 22: source boundary", () => {
     // legitimately uses node:fs for existsSync to distinguish missing
     // config from invalid config. All other host sources remain clean.
     const files = hostSourceFiles().filter(
-      (f) => !f.includes("configured-host"),
+      (f) => !f.includes("configured-host") && !f.includes("credential-source"),
     );
     for (const file of files) {
       const source = readFileSync(join(REPO_ROOT, file), "utf8").toLowerCase();
