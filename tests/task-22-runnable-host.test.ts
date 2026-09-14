@@ -16,7 +16,7 @@ import {
   httpOk,
   makeBackendRegistry,
 } from "./helpers/agent-backend-fixtures.js";
-import { randomTestPort } from "./helpers/local-agent-host-fixtures.js";
+import { createStartedRunnableHost, randomTestPort } from "./helpers/local-agent-host-fixtures.js";
 
 export function compositionOptions(
   overrides: Record<string, unknown> = {},
@@ -64,14 +64,13 @@ class RecordingStore implements LocalAgentSessionStore {
 
 describe("Task 22: runnable host composition", () => {
   test("createRunnableLocalAgentHost creates a startable host", async () => {
-    const host = createRunnableLocalAgentHost(compositionOptions() as never);
-    expect(host.state()).toBe("created");
+    const started = await createStartedRunnableHost(compositionOptions() as never);
+    const { host } = started;
     try {
-      await host.start();
       expect(host.state()).toBe("running");
       expect(host.address()?.startsWith("http://127.0.0.1")).toBe(true);
     } finally {
-      await host.close();
+      await started.dispose();
     }
   });
 
@@ -184,11 +183,11 @@ describe("Task 22: runnable host composition", () => {
 
   test("an injected session store is actually used", async () => {
     const store = new RecordingStore();
-    const host = createRunnableLocalAgentHost(
+    const started = await createStartedRunnableHost(
       compositionOptions({ store }) as never,
     );
+    const { host } = started;
     try {
-      await host.start();
       const client = new (await import("../packages/local-agent-client/src/index.js")).LocalAgentApiClient(
         host.address()!,
       );
@@ -203,14 +202,14 @@ describe("Task 22: runnable host composition", () => {
       }
       expect(store.appended.length).toBeGreaterThan(0);
     } finally {
-      await host.close();
+      await started.dispose();
     }
   });
 
   test("without an injected store the default in-memory store is used", async () => {
-    const host = createRunnableLocalAgentHost(compositionOptions() as never);
+    const started = await createStartedRunnableHost(compositionOptions() as never);
+    const { host } = started;
     try {
-      await host.start();
       const client = new (await import("../packages/local-agent-client/src/index.js")).LocalAgentApiClient(
         host.address()!,
       );
@@ -218,16 +217,16 @@ describe("Task 22: runnable host composition", () => {
       const fetched = await client.getSession(session.id);
       expect(fetched.id).toBe(session.id);
     } finally {
-      await host.close();
+      await started.dispose();
     }
   });
 
   test("a tiny maxBodyBytes is honored by the underlying server", async () => {
-    const host = createRunnableLocalAgentHost(
+    const started = await createStartedRunnableHost(
       compositionOptions({ maxBodyBytes: 8 }) as never,
     );
+    const { host } = started;
     try {
-      await host.start();
       const client = new (await import("../packages/local-agent-client/src/index.js")).LocalAgentApiClient(
         host.address()!,
       );
@@ -255,7 +254,7 @@ describe("Task 22: runnable host composition", () => {
       const body = (await response.json()) as { error?: { code?: string } };
       expect(body.error?.code).toBe("payload_too_large");
     } finally {
-      await host.close();
+      await started.dispose();
     }
   });
 

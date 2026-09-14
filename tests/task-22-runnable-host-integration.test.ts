@@ -10,6 +10,7 @@ import {
   anthropicSuccessResponse,
   createScriptedHttpClient,
 } from "./helpers/http-fixtures.js";
+import { createStartedRunnableHost } from "./helpers/local-agent-host-fixtures.js";
 
 interface Handle {
   readonly port: number;
@@ -39,22 +40,15 @@ function composition(overrides: {
 async function startHost(
   options: Record<string, unknown>,
 ): Promise<Handle> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 25; attempt += 1) {
-    const host = createRunnableLocalAgentHost(options as never);
-    try {
-      await host.start();
-      return {
-        port: Number(host.address()!.split(":").pop()),
-        client: new LocalAgentApiClient(host.address()!),
-        close: () => host.close(),
-      };
-    } catch (error) {
-      lastError = error;
-      await host.close().catch(() => undefined);
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error("unable to start host");
+  const started = await createStartedRunnableHost({
+    ...options,
+    port: undefined,
+  } as never);
+  return {
+    port: started.port,
+    client: new LocalAgentApiClient(started.host.address()!),
+    close: started.dispose,
+  };
 }
 
 function textOptions(): Record<string, unknown> {

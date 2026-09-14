@@ -18,6 +18,7 @@ import {
   textDelta,
   loopCompleted,
 } from "./helpers/agent-backend-fixtures.js";
+import { createStartedRunnableHost } from "./helpers/local-agent-host-fixtures.js";
 
 function composition(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const fixture = makeBackendRegistry();
@@ -72,17 +73,17 @@ describe("Task 22: cancellation and release through the composition", () => {
   test("cancelling a gated body ends the composed host turn promptly", async () => {
     const fixture = makeBackendRegistry();
     const gated = createGatedSource();
-    const host = createRunnableLocalAgentHost({
-      port: 30000 + Math.floor(Math.random() * 30000),
+    const started = await createStartedRunnableHost({
       backend: {
         registry: fixture.registry,
         credentials: fixture.credentials,
         httpClient: createScriptedHttpClient([httpResponse(200, gated.stream)]).client,
       },
-    });
+      port: undefined,
+    } as never);
+    const { host } = started;
     const { LocalAgentApiClient } = await import("../packages/local-agent-client/src/index.js");
     try {
-      await host.start();
       const client = new LocalAgentApiClient(host.address()!);
       const session = await client.createSession();
       const controller = new AbortController();
@@ -116,7 +117,7 @@ describe("Task 22: cancellation and release through the composition", () => {
       }
       expect(["cancelled", "failed"]).toContain(status);
     } finally {
-      await host.close();
+      await started.dispose();
     }
   });
 

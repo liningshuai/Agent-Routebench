@@ -5,8 +5,10 @@ import type {
 } from "../../packages/local-agent-api/src/index.js";
 import {
   createLocalAgentHost,
+  createRunnableLocalAgentHost,
   type LocalAgentHost,
   type LocalAgentHostOptions,
+  type RunnableLocalAgentHostOptions,
 } from "../../apps/local-agent-host/src/index.js";
 
 /** Fixed error message asserted by the not-ready runner flow. */
@@ -89,4 +91,35 @@ export async function createStartedTestHost(
     }
   }
   throw lastError instanceof Error ? lastError : new Error("unable to start test host");
+}
+
+/**
+ * Creates a runnable composition on a fresh random port, retrying only the
+ * listener-start race that can occur when Vitest workers start in parallel.
+ * The caller's explicit port is never replaced, so configuration errors still
+ * fail immediately and the public port contract remains unchanged.
+ */
+export async function createStartedRunnableHost(
+  overrides: Omit<RunnableLocalAgentHostOptions, "port"> & { readonly port?: number },
+): Promise<{ host: LocalAgentHost; port: number; dispose: () => Promise<void> }> {
+  let lastError: unknown;
+  const attempts = overrides.port === undefined ? 25 : 1;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const port = overrides.port ?? randomTestPort();
+    const host = createRunnableLocalAgentHost({ ...overrides, port });
+    try {
+      await host.start();
+      const address = host.address() ?? "";
+      const parsedPort = Number(address.split(":").pop());
+      return {
+        host,
+        port: Number.isSafeInteger(parsedPort) && parsedPort > 0 ? parsedPort : port,
+        dispose: () => host.close(),
+      };
+    } catch (error) {
+      lastError = error;
+      await host.close().catch(() => undefined);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("unable to start runnable test host");
 }
